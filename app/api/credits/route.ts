@@ -55,13 +55,13 @@ export async function POST(request: Request) {
 })
 
     // Record ad view
-    await prisma.adView.create({
-      data: {
-        userId: user.id,
-        adType: type,
-        credits
-      }
-    })
+    await prisma.userAdInteraction.create({
+  data: {
+    userId: user.id,
+    campaignId: campaignId, // Replace with the actual campaign id you’re referencing
+    creditsEarned: credits,
+  },
+})
 
     return NextResponse.json({ credits: user.credits, earned: credits })
   } catch (error) {
