@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { name, ip, port, token, maxRam, maxStorage } = body
+    const { name, ip, port, token, region, maxRam, maxStorage } = body
 
     const node = await prisma.node.create({
       data: {
@@ -44,6 +44,7 @@ export async function POST(request: Request) {
         ip,
         port: parseInt(port),
         token: parseString(token),
+        region,
         maxRam: parseInt(maxRam),
         maxStorage: parseInt(maxStorage),
       }
