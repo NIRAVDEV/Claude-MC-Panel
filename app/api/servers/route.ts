@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
     const servers = await prisma.server.findMany({
       where: {
-        ownerId: session.user.id,
+        userId: session.user.id,
       },
     });
 
