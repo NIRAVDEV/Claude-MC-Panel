@@ -55,13 +55,33 @@ export async function POST(request: Request) {
 })
 
     // Record ad view
-    await prisma.userAdInteraction.create({
+    const existingInteraction = await prisma.userAdInteraction.findUnique({
+  where: {
+    userId_campaignId: {
+      userId: user.id,
+      campaignId: campaign.id,
+    },
+  },
+});
+
+if (existingInteraction) {
+  return new Response("You already claimed this campaign!", { status: 400 });
+}
+
+// Give credits & create record
+await prisma.userAdInteraction.create({
   data: {
     userId: user.id,
-    campaignId: campaignId, // Replace with the actual campaign id you’re referencing
-    creditsEarned: credits,
+    campaignId: campaign.id,
+    creditsEarned: campaign.credits,
   },
-})
+});
+
+// Optionally: update user credits
+await prisma.user.update({
+  where: { id: user.id },
+  data: { credits: { increment: campaign.credits } },
+});
 
     return NextResponse.json({ credits: user.credits, earned: credits })
   } catch (error) {
