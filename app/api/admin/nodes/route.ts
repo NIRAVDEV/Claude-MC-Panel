@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
+
+const token = crypto.randomBytes(32).toString("hex");
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -40,7 +43,7 @@ export async function POST(request: Request) {
         name,
         ip,
         port: parseInt(port),
-        token,
+        token: parseString(token),
         maxRam: parseInt(maxRam),
         maxStorage: parseInt(maxStorage),
       }
