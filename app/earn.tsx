@@ -205,3 +205,5 @@ export default function EarnPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}

@@ -42,89 +42,168 @@ model User {
   emailVerified DateTime?
   image         String?
   role          Role      @default(USER)
-  credits       Int       @default(0)
+  credits       Int       @default(100)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts    Account[]
-  sessions    Session[]
-  servers     Server[]
-  transactions Transaction[]
-  adViews     AdView[]
+  accounts         Account[]
+  sessions         Session[]
+  servers          Server[]
+  transactions     Transaction[]
+  supportTickets   SupportTicket[]
+  referralCode     String?          @unique
+  referredBy       String?
+  referrals        User[]           @relation("UserReferrals")
+  referrer         User?            @relation("UserReferrals", fields: [referredBy], references: [id])
+
+  @@map("users")
 }
 
-model Server {
-  id          String      @id @default(cuid())
-  name        String
-  software    String
-  ram         String
-  storage     String
-  status      ServerStatus @default(STOPPED)
-  containerId String?
-  nodeId      String
-  userId      String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  node Node @relation(fields: [nodeId], references: [id])
-
-  @@unique([name, userId])
+  @@unique([identifier, token])
 }
 
 model Node {
   id          String     @id @default(cuid())
-  name        String     @unique
-  ip          String
-  port        Int        @default(25575)
-  token       String
+  name        String
+  host        String
+  port        Int        @default(2376)
+  region      String
   status      NodeStatus @default(OFFLINE)
-  maxRam      Int        @default(16)
-  usedRam     Int        @default(0)
-  maxStorage  Int        @default(100)
-  usedStorage Int        @default(0)
+  maxRam      Int        // in GB
+  maxStorage  Int        // in GB
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   servers Server[]
+
+  @@map("nodes")
+}
+
+model Server {
+  id          String       @id @default(cuid())
+  name        String
+  software    ServerType   @default(VANILLA)
+  version     String       @default("1.20.4")
+  ram         Int          // in GB
+  storage     Int          // in GB
+  port        Int?
+  status      ServerStatus @default(STOPPED)
+  containerId String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  nodeId String?
+  node   Node?   @relation(fields: [nodeId], references: [id])
+
+  backups Backup[]
+
+  @@map("servers")
+}
+
+model Backup {
+  id        String   @id @default(cuid())
+  name      String
+  size      Int      // in bytes
+  createdAt DateTime @default(now())
+
+  serverId String
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@map("backups")
 }
 
 model Transaction {
-  id          String            @id @default(cuid())
-  userId      String
+  id          String          @id @default(cuid())
   type        TransactionType
   amount      Int
-  credits     Int
-  status      TransactionStatus @default(PENDING)
-  paymentId   String?
-  description String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  description String
+  createdAt   DateTime        @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
 }
 
-model AdView {
+model SupportTicket {
+  id          String       @id @default(cuid())
+  subject     String
+  description String       @db.Text
+  status      TicketStatus @default(OPEN)
+  priority    Priority     @default(MEDIUM)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  messages TicketMessage[]
+
+  @@map("support_tickets")
+}
+
+model TicketMessage {
   id        String   @id @default(cuid())
-  userId    String
-  adType    String
-  credits   Int
+  message   String   @db.Text
+  isStaff   Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticketId String
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_messages")
+}
+
+// Credit Package model for paid credit options
+model CreditPackage {
+  id          String  @id @default(cuid())
+  name        String
+  credits     Int
+  price       Float   // in USD
+  isPopular   Boolean @default(false)
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("credit_packages")
+}
+
+// Ad Campaign model for credit earning
+model AdCampaign {
+  id          String  @id @default(cuid())
+  name        String
+  url         String
+  credits     Int
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("ad_campaigns")
+}
+
+// User ad interactions for tracking
+model UserAdInteraction {
+  id          String   @id @default(cuid())
+  userId      String
+  campaignId  String
+  creditsEarned Int
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, campaignId])
+  @@map("user_ad_interactions")
 }
 
 enum Role {
   USER
   ADMIN
-}
-
-enum ServerStatus {
-  RUNNING
-  STOPPED
-  STARTING
-  STOPPING
-  ERROR
 }
 
 enum NodeStatus {
@@ -133,16 +212,45 @@ enum NodeStatus {
   MAINTENANCE
 }
 
-enum TransactionType {
-  PURCHASE
-  AD_VIEW
-  LINK_CLICK
-  SERVER_COST
+enum ServerType {
+  VANILLA
+  PAPER
+  SPIGOT
+  FORGE
+  FABRIC
+  BUKKIT
+  PURPUR
 }
 
-enum TransactionStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  CANCELLED
+enum ServerStatus {
+  STARTING
+  RUNNING
+  STOPPING
+  STOPPED
+  ERROR
+}
+
+enum TransactionType {
+  EARNED_AD
+  EARNED_TASK
+  EARNED_REFERRAL
+  EARNED_DAILY
+  SPENT_SERVER
+  SPENT_UPGRADE
+  PURCHASED
+  REFUND
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
