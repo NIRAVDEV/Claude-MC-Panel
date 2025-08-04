@@ -128,6 +128,7 @@ model Transaction {
   description String
   createdAt   DateTime        @default(now())
   credits     Int
+  status      String          @default(ON GOING)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
