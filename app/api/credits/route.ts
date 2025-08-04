@@ -16,6 +16,16 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { type, amount } = body
 
+   const { campaignId } = await req.json();
+
+const campaign = await prisma.adCampaign.findUnique({
+  where: { id: campaignId },
+});
+
+if (!campaign) {
+  return new Response("Campaign not found", { status: 404 });
+}
+
     let credits = 0
     let description = ''
 
