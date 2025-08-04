@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     await prisma.transaction.create({
   data: {
     userId: user.id,
-    type: type === 'ad_view' ? TransactionType.AD_VIEW : TransactionType.LINK_CLICK,
+    type: type === 'ad_view' ? TransactionType.EARNED_AD : TransactionType.EARNED_TASK,
     amount: 0,
     credits,
     status: 'COMPLETED',
