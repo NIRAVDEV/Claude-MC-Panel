@@ -36,19 +36,35 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { name, ip, port, token, region, maxRam, maxStorage } = body
+const {
+  name,
+  ip,
+  port,
+  token,
+  region,
+  maxRam,
+  maxStorage
+}: {
+  name: string,
+  ip: string,
+  port: number | string,
+  token: string,
+  region: string,
+  maxRam: number | string,
+  maxStorage: number | string
+} = body
 
-    const node = await prisma.node.create({
-      data: {
-        name,
-        ip,
-        port: parseInt(port),
-        token: parseString(token),
-        region,
-        maxRam: parseInt(maxRam),
-        maxStorage: parseInt(maxStorage),
-      }
-    })
+const node = await prisma.node.create({
+  data: {
+    name,
+    ip,
+    port: typeof port === "string" ? parseInt(port) : port,
+    token,
+    region,
+    maxRam: typeof maxRam === "string" ? parseInt(maxRam) : maxRam,
+    maxStorage: typeof maxStorage === "string" ? parseInt(maxStorage) : maxStorage
+  }
+})
 
     return NextResponse.json(node)
   } catch (error) {
