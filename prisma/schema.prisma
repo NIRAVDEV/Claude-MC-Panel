@@ -70,7 +70,7 @@ model VerificationToken {
 model Node {
   id          String     @id @default(cuid())
   name        String
-  host        String
+  ip          String
   port        Int        @default(2376)
   region      String
   status      NodeStatus @default(OFFLINE)
