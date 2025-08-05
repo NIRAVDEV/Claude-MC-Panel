@@ -41,11 +41,10 @@ async function main() {
     prisma.node.create({
       data: {
         name: 'US-East-1',
-        ipAddress: '192.168.1.100',
-        maxMemory: 16384,
+        ip: '192.168.1.100',
+        maxRam: 16384,
         maxStorage: 500,
-        maxServers: 20,
-        usedMemory: 2048,
+        usedRam: 2048,
         usedStorage: 50,
         status: 'ONLINE',
       },
@@ -53,14 +52,12 @@ async function main() {
     prisma.node.create({
       data: {
         name: 'EU-West-1',
-        ipAddress: '192.168.1.101',
-        maxMemory: 12288,
+        ip: '192.168.1.101',
+        maxRam: 12288,
         maxStorage: 300,
-        maxServers: 15,
-        usedMemory: 1024,
-        usedStorage: 30,
+        // usedRam: 1024,
+       // usedStorage: 30,
         status: 'ONLINE',
-      },
     }),
     prisma.node.create({
       data: {
@@ -68,12 +65,11 @@ async function main() {
         ipAddress: '192.168.1.102',
         maxMemory: 8192,
         maxStorage: 200,
-        maxServers: 10,
+        maxMemory: 8192,
+        maxStorage: 200,
         usedMemory: 512,
         usedStorage: 20,
         status: 'MAINTENANCE',
-      },
-    }),
   ]);
 
   console.log('🖥️  Created demo nodes');
