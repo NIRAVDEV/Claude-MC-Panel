@@ -1,62 +1,114 @@
-// app/api/credits/route.ts
-import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { TransactionType } from '@prisma/client'
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
-export async function POST(request: Request) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+export async function GET(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { type } = body
-
-    let credits = 0
-    let description = ''
-
-    switch (type) {
-      case 'ad_view':
-        credits = Math.floor(Math.random() * 6) + 5 // 5-10
-        description = 'Ad view reward'
-        break
-      case 'link_click':
-        credits = Math.floor(Math.random() * 4) + 2 // 2-5
-        description = 'Link click reward'
-        break
-      default:
-        return NextResponse.json({ error: 'Invalid credit type' }, { status: 400 })
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Update user credits
-    const user = await prisma.user.update({
-      where: { email: session.user.email },
-      data: {
-        credits: {
-          increment: credits,
-        },
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        credits: true,
       },
-    })
+    });
 
-    // Log transaction
-    await prisma.transaction.create({
-      data: {
-        userId: user.id,
-        type: type === 'ad_view' ? TransactionType.EARNED_AD : TransactionType.EARNED_TASK,
-        amount: 0,
-        credits,
-        status: 'COMPLETED',
-        description,
-      },
-    })
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
 
-    return NextResponse.json({ credits: user.credits, earned: credits })
+    // Get recent transactions
+    const transactions = await prisma.transaction.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+
+    return NextResponse.json({ 
+      credits: user.credits,
+      transactions 
+    });
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: 'Failed to award credits' }, { status: 500 })
+    console.error('Error fetching credits:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch credits' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { action, amount, description } = body;
+
+    if (!action || !amount) {
+      return NextResponse.json(
+        { error: 'Missing required fields: action, amount' },
+        { status: 400 }
+      );
+    }
+
+    if (action !== 'earn' && action !== 'purchase') {
+      return NextResponse.json(
+        { error: 'Invalid action. Must be "earn" or "purchase"' },
+        { status: 400 }
+      );
+    }
+
+    if (amount <= 0) {
+      return NextResponse.json(
+        { error: 'Amount must be positive' },
+        { status: 400 }
+      );
+    }
+
+    // Update user credits and create transaction in a single transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Update user credits
+      const updatedUser = await tx.user.update({
+        where: { id: session.user.id },
+        data: {
+          credits: {
+            increment: amount,
+          },
+        },
+        select: {
+          credits: true,
+        },
+      });
+
+      // Create transaction record
+      const transaction = await tx.transaction.create({
+        data: {
+          userId: session.user.id,
+          type: 'CREDIT',
+          amount,
+          description: description || `Credits ${action}ed`,
+          status: 'COMPLETED',
+        },
+      });
+
+      return { credits: updatedUser.credits, transaction };
+    });
+
+    return NextResponse.json(result, { status: 200 });
+  } catch (error) {
+    console.error('Error updating credits:', error);
+    return NextResponse.json(
+      { error: 'Failed to update credits' },
+      { status: 500 }
+    );
   }
 }
