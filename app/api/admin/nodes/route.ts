@@ -53,7 +53,7 @@ export async function GET() {
       ...node,
       serverCount: node._count.servers,
       utilizationRam: Math.round((node.servers.length * 1024 / node.maxRam) * 100), // Rough estimate
-      utilizationServers: Math.round((node.servers.length / node.maxServers) * 100)
+      // utilizationServers: Math.round((node.servers.length / node.maxServers) * 100)
     }))
 
     return NextResponse.json(nodesWithStats)
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       location,    // Geographic/logical location
       maxRam, 
       maxDisk, 
-      maxServers, 
+     // maxServers, 
       isActive 
     } = body
 
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
         location: location || null,             // Geographic location
         maxRam: maxRam || 8192,                // Default 8GB RAM
         maxDisk: maxDisk || 100,               // Default 100GB disk
-        maxServers: maxServers || 10,          // Default 10 servers
+        // maxServers: maxServers || 10,          // Default 10 servers
         isActive: isActive !== undefined ? isActive : true,
       },
       include: {
@@ -190,7 +190,7 @@ export async function PUT(request: NextRequest) {
       location, 
       maxRam, 
       maxDisk, 
-      maxServers, 
+      // maxServers, 
       isActive 
     } = body
 
@@ -268,7 +268,8 @@ export async function PUT(request: NextRequest) {
     if (location !== undefined) updateData.location = location
     if (maxRam !== undefined) updateData.maxRam = maxRam
     if (maxDisk !== undefined) updateData.maxDisk = maxDisk
-    if (maxServers !== undefined) updateData.maxServers = maxServers
+   // if (maxServers !== undefined) 
+ // updateData.maxServers = maxServers
     if (isActive !== undefined) updateData.isActive = isActive
 
     const updatedNode = await prisma.node.update({
