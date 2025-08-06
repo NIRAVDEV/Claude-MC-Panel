@@ -99,6 +99,8 @@ export default function CreateServerPage() {
                   <SelectContent>
                     <SelectItem value="vanilla">Vanilla</SelectItem>
                     <SelectItem value="paper">Paper</SelectItem>
+                    <SelectItem value="purpur">Purpur</SelectItem>
+                    <SelectItem value="leaf">Leaf</SelectItem>
                     <SelectItem value="spigot">Spigot</SelectItem>
                     <SelectItem value="forge">Forge</SelectItem>
                     <SelectItem value="fabric">Fabric</SelectItem>

@@ -31,20 +31,34 @@ export default function DashboardPage() {
     }
   }, [status, router])
 
+  // useEffect(() => {
+  //   const fetchServers = async () => {
+  //     try {
+  //       const response = await fetch('/api/servers')
+  //       if (response.ok) {
+  //         const data = await response.json()
+  //         setServers(data)
+  //       }
+  //     } catch (error) {
+  //       console.error('Failed to fetch servers:', error)
+  //     } finally {
+  //       setIsLoading(false)
+  //     }
+  //   }
   useEffect(() => {
     const fetchServers = async () => {
-      try {
-        const response = await fetch('/api/servers')
-        if (response.ok) {
-          const data = await response.json()
-          setServers(data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch servers:', error)
-      } finally {
-        setIsLoading(false)
-      }
+  try {
+    const response = await fetch('/api/servers')
+    if (response.ok) {
+      const data = await response.json()
+      setServers(Array.isArray(data) ? data : [])
     }
+  } catch (error) {
+    console.error('Failed to fetch servers:', error)
+  } finally {
+    setIsLoading(false)
+  }
+}
 
     if (session?.user?.email) {
       fetchServers()
@@ -127,7 +141,8 @@ export default function DashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold flex items-center text-green-600">
                 <Play className="h-5 w-5 mr-2" />
-                {servers.filter(s => s.status === 'running').length}
+                {/* {servers.filter(s => s.status === 'running').length || <p className="text-muted-foreground">No Servers are created</p>} */}
+                {(servers || []).filter(s => s.status === 'running').length || <p className="text-muted-foreground">0</p>}
               </div>
             </CardContent>
           </Card>
