@@ -44,37 +44,38 @@ export async function POST(request: NextRequest) {
         data: {
           name: 'US-East-1',
           ipAddress: '192.168.1.100',
-          maxMemory: 16384,
-          maxStorage: 500,
+          host: 'us-east-1.minecrafthost.com',
+          maxRam: 16384,
+          maxDisk: 500,
           maxServers: 20,
-          usedMemory: 2048,
-          usedStorage: 50,
           status: 'ONLINE',
-        },
+          // usedMemory: 2048,
+          // usedStorage: 50,
+        }
       }),
       prisma.node.create({
         data: {
           name: 'EU-West-1',
           ipAddress: '192.168.1.101',
-          maxMemory: 12288,
-          maxStorage: 300,
+          host: 'eu-west-1.minecrafthost.com',
+          maxRam: 12288,
+          maxDisk: 300,
           maxServers: 15,
-          usedMemory: 1024,
-          usedStorage: 30,
           status: 'ONLINE',
-        },
+          // usedMemory: 1024,
+          // usedStorage: 30,
+        }
       }),
       prisma.node.create({
         data: {
           name: 'Asia-Pacific',
           ipAddress: '192.168.1.102',
-          maxMemory: 8192,
-          maxStorage: 200,
+          host: 'asia-pacific.minecrafthost.com',
+          maxRam: 8192,
+          maxDisk: 200,
           maxServers: 10,
-          usedMemory: 512,
-          usedStorage: 20,
-          status: 'MAINTENANCE',
-        },
+          status: 'ONLINE'
+        }
       }),
     ]);
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
           port: 25565,
           userId: regularUser.id,
           nodeId: nodes[0].id,
-          dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
+          // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
           version: '1.20.1',
           plugins: ['EssentialsX', 'WorldEdit', 'LuckPerms'],
         },
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
           port: 25566,
           userId: regularUser.id,
           nodeId: nodes[1].id,
-          dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
+          // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
           version: '1.20.1',
           plugins: ['WorldEdit', 'FastAsyncWorldEdit', 'VoxelSniper'],
         },
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
           port: 25567,
           userId: adminUser.id,
           nodeId: nodes[0].id,
-          dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
+          // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
           version: '1.19.4',
           plugins: ['Essentials'],
         },
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
       prisma.transaction.create({
         data: {
           userId: regularUser.id,
-          type: 'EARN',
+          type: 'WELCOME_BONUS',
           amount: 500,
           description: 'Welcome bonus',
           status: 'COMPLETED',
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
       prisma.transaction.create({
         data: {
           userId: regularUser.id,
-          type: 'SPEND',
+          type: 'SERVER_PAYMENT',
           amount: 200,
           description: 'Server creation: My Survival Server',
           status: 'COMPLETED',
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
       prisma.transaction.create({
         data: {
           userId: regularUser.id,
-          type: 'EARN',
+          type: 'TASK_REWARD',
           amount: 100,
           description: 'Completed survey',
           status: 'COMPLETED',
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
       prisma.transaction.create({
         data: {
           userId: adminUser.id,
-          type: 'EARN',
+          type: 'ADMIN_CREDITS',
           amount: 10000,
           description: 'Admin credits',
           status: 'COMPLETED',

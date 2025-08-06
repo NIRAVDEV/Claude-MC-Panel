@@ -1,202 +1,269 @@
-export interface WebSocketMessage {
-  type: 'server_status' | 'console_output' | 'notification' | 'error' | 'authenticated' | 'subscribed';
-  serverId?: string;
-  data: any;
-  timestamp: number;
+// lib/websocket-client.tsx
+'use client'
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
+import { 
+  WebSocketMessage, 
+  IncomingWebSocketMessage, 
+  OutgoingWebSocketMessage,
+  AuthenticateMessage,
+  SubscribeServerMessage, 
+  ServerCommandMessage 
+} from './websocket-types'
+
+interface WebSocketContextType {
+  isConnected: boolean
+  isAuthenticated: boolean
+  subscribe: (serverId: string) => void
+  unsubscribe: (serverId: string) => void
+  sendCommand: (serverId: string, command: string) => void
+  addMessageListener: (callback: (message: IncomingWebSocketMessage) => void) => () => void
+  reconnect: () => void
 }
 
-export type WebSocketEventHandler = (message: WebSocketMessage) => void;
+const WebSocketContext = createContext<WebSocketContextType | null>(null)
 
-export class WebSocketClient {
-  private ws: WebSocket | null = null;
-  private reconnectInterval: number = 5000;
-  private maxReconnectAttempts: number = 5;
-  private reconnectAttempts: number = 0;
-  private url: string;
-  private eventHandlers: Map<string, WebSocketEventHandler[]> = new Map();
-  private isConnecting: boolean = false;
-  private shouldReconnect: boolean = true;
+interface WebSocketProviderProps {
+  children: ReactNode
+  userId?: string
+}
 
-  constructor(url: string = 'ws://localhost:3001') {
-    this.url = url;
-  }
+export function WebSocketProvider({ children, userId }: WebSocketProviderProps) {
+  const ws = useRef<WebSocket | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [reconnectAttempts, setReconnectAttempts] = useState(0)
+  const messageListeners = useRef<Set<(message: IncomingWebSocketMessage) => void>>(new Set())
+  const reconnectTimer = useRef<NodeJS.Timeout>()
+  
+  const maxReconnectAttempts = 5
+  const reconnectDelay = 1000
 
-  public connect(userId?: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.isConnecting || this.ws?.readyState === WebSocket.OPEN) {
-        resolve();
-        return;
-      }
-
-      this.isConnecting = true;
+  const connect = () => {
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${protocol}//${window.location.host}/api/ws`
       
-      try {
-        this.ws = new WebSocket(this.url);
-
-        this.ws.onopen = () => {
-          console.log('WebSocket connected');
-          this.isConnecting = false;
-          this.reconnectAttempts = 0;
-          
-          // Authenticate if userId provided
-          if (userId) {
-            this.send({
-              type: 'authenticate',
-              userId,
-              data: {},
-              timestamp: Date.now()
-            });
-          }
-          
-          resolve();
-        };
-
-        this.ws.onmessage = (event) => {
-          try {
-            const message: WebSocketMessage = JSON.parse(event.data);
-            this.handleMessage(message);
-          } catch (error) {
-            console.error('Failed to parse WebSocket message:', error);
-          }
-        };
-
-        this.ws.onclose = (event) => {
-          console.log('WebSocket disconnected:', event.code, event.reason);
-          this.isConnecting = false;
-          this.ws = null;
-          
-          if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.scheduleReconnect(userId);
-          }
-        };
-
-        this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          this.isConnecting = false;
-          reject(error);
-        };
-
-      } catch (error) {
-        this.isConnecting = false;
-        reject(error);
+      ws.current = new WebSocket(wsUrl)
+      
+      ws.current.onopen = () => {
+        console.log('WebSocket connected')
+        setIsConnected(true)
+        setReconnectAttempts(0)
+        
+        // Authenticate if userId is available
+        if (userId) {
+          authenticate(userId)
+        }
       }
-    });
+      
+      ws.current.onmessage = (event) => {
+        try {
+          const message: IncomingWebSocketMessage = JSON.parse(event.data)
+          
+          // Handle authentication response
+          if (message.type === 'authenticated') {
+            setIsAuthenticated(true)
+            console.log('WebSocket authenticated')
+          }
+          
+          // Notify all listeners
+          messageListeners.current.forEach(listener => {
+            try {
+              listener(message)
+            } catch (error) {
+              console.error('Error in message listener:', error)
+            }
+          })
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error)
+        }
+      }
+      
+      ws.current.onclose = (event) => {
+        console.log('WebSocket disconnected:', event.code, event.reason)
+        setIsConnected(false)
+        setIsAuthenticated(false)
+        
+        // Only attempt reconnection if it wasn't a manual close
+        if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+          scheduleReconnect()
+        }
+      }
+      
+      ws.current.onerror = (error) => {
+        console.error('WebSocket error:', error)
+      }
+    } catch (error) {
+      console.error('Error creating WebSocket connection:', error)
+      scheduleReconnect()
+    }
   }
 
-  private scheduleReconnect(userId?: string) {
-    this.reconnectAttempts++;
-    console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+  const scheduleReconnect = () => {
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current)
+    }
     
-    setTimeout(() => {
-      this.connect(userId).catch(console.error);
-    }, this.reconnectInterval);
+    const delay = reconnectDelay * Math.pow(2, reconnectAttempts) // Exponential backoff
+    
+    reconnectTimer.current = setTimeout(() => {
+      console.log(`Attempting to reconnect... (${reconnectAttempts + 1}/${maxReconnectAttempts})`)
+      setReconnectAttempts(prev => prev + 1)
+      connect()
+    }, delay)
   }
 
-  private handleMessage(message: WebSocketMessage) {
-    const handlers = this.eventHandlers.get(message.type) || [];
-    handlers.forEach(handler => {
+  const sendMessage = (message: OutgoingWebSocketMessage) => {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       try {
-        handler(message);
+        ws.current.send(JSON.stringify(message))
       } catch (error) {
-        console.error('Error in WebSocket event handler:', error);
+        console.error('Error sending WebSocket message:', error)
       }
-    });
-
-    // Also trigger 'message' event for all messages
-    const messageHandlers = this.eventHandlers.get('message') || [];
-    messageHandlers.forEach(handler => {
-      try {
-        handler(message);
-      } catch (error) {
-        console.error('Error in WebSocket message handler:', error);
-      }
-    });
-  }
-
-  public on(event: string, handler: WebSocketEventHandler) {
-    if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, []);
-    }
-    this.eventHandlers.get(event)!.push(handler);
-  }
-
-  public off(event: string, handler: WebSocketEventHandler) {
-    const handlers = this.eventHandlers.get(event);
-    if (handlers) {
-      const index = handlers.indexOf(handler);
-      if (index > -1) {
-        handlers.splice(index, 1);
-      }
-    }
-  }
-
-  public send(message: Omit<WebSocketMessage, 'timestamp'>) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        ...message,
-        timestamp: Date.now()
-      }));
     } else {
-      console.warn('WebSocket is not connected');
+      console.warn('WebSocket not connected, message not sent:', message)
     }
   }
 
-  public subscribeToServer(serverId: string) {
-    this.send({
-      type: 'subscribe_server',
-      serverId,
-      data: {}
-    });
+  const authenticate = (userId: string) => {
+    const message: AuthenticateMessage = {
+      type: 'authenticate',
+      data: {
+        userId
+      }
+    }
+    sendMessage(message)
   }
 
-  public sendServerCommand(serverId: string, command: string) {
-    this.send({
+  const subscribe = (serverId: string) => {
+    const message: SubscribeServerMessage = {
+      type: 'subscribe_server',
+      serverId
+    }
+    sendMessage(message)
+  }
+
+  const unsubscribe = (serverId: string) => {
+    const message: OutgoingWebSocketMessage = {
+      type: 'unsubscribe_server',
+      serverId
+    }
+    sendMessage(message)
+  }
+
+  const sendCommand = (serverId: string, command: string) => {
+    const message: ServerCommandMessage = {
       type: 'server_command',
       serverId,
-      data: { command }
-    });
-  }
-
-  public disconnect() {
-    this.shouldReconnect = false;
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+      command
     }
+    sendMessage(message)
   }
 
-  public isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
-  }
-
-  public getConnectionState(): string {
-    if (!this.ws) return 'disconnected';
+  const addMessageListener = (callback: (message: IncomingWebSocketMessage) => void) => {
+    messageListeners.current.add(callback)
     
-    switch (this.ws.readyState) {
-      case WebSocket.CONNECTING:
-        return 'connecting';
-      case WebSocket.OPEN:
-        return 'connected';
-      case WebSocket.CLOSING:
-        return 'closing';
-      case WebSocket.CLOSED:
-        return 'disconnected';
-      default:
-        return 'unknown';
+    // Return cleanup function
+    return () => {
+      messageListeners.current.delete(callback)
     }
   }
+
+  const reconnect = () => {
+    if (ws.current) {
+      ws.current.close()
+    }
+    setReconnectAttempts(0)
+    connect()
+  }
+
+  // Connect on mount
+  useEffect(() => {
+    connect()
+    
+    return () => {
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current)
+      }
+      if (ws.current) {
+        ws.current.close(1000, 'Component unmounting')
+      }
+    }
+  }, [])
+
+  // Re-authenticate when userId changes
+  useEffect(() => {
+    if (isConnected && userId && !isAuthenticated) {
+      authenticate(userId)
+    }
+  }, [isConnected, userId, isAuthenticated])
+
+  const contextValue: WebSocketContextType = {
+    isConnected,
+    isAuthenticated,
+    subscribe,
+    unsubscribe,
+    sendCommand,
+    addMessageListener,
+    reconnect
+  }
+
+  return (
+    <WebSocketContext.Provider value={contextValue}>
+      {children}
+    </WebSocketContext.Provider>
+  )
 }
 
-// Create a global instance
-let globalWsClient: WebSocketClient | null = null;
-
-export function getWebSocketClient(): WebSocketClient {
-  if (!globalWsClient) {
-    const wsUrl = process.env.NODE_ENV === 'development' 
-      ? 'ws://localhost:3001' 
-      : 'wss://your-websocket-service.com'; // Replace with your production WebSocket service
-    
-    globalWsClient = new WebSocketClient(wsUrl);
+export function useWebSocket(): WebSocketContextType {
+  const context = useContext(WebSocketContext)
+  if (!context) {
+    throw new Error('useWebSocket must be used within a WebSocketProvider')
   }
-  return globalWsClient;
+  return context
+}
+
+// Hook for server-specific WebSocket functionality
+export function useServerWebSocket(serverId?: string) {
+  const ws = useWebSocket()
+  const [serverStatus, setServerStatus] = useState<any>(null)
+  const [consoleOutput, setConsoleOutput] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!serverId || !ws.isAuthenticated) return
+
+    // Subscribe to server events
+    ws.subscribe(serverId)
+
+    // Set up message listener
+    const cleanup = ws.addMessageListener((message) => {
+      if (message.serverId !== serverId) return
+
+      switch (message.type) {
+        case 'server_status':
+          setServerStatus(message.data)
+          break
+        case 'console_output':
+          setConsoleOutput(prev => [...prev, message.data.line].slice(-100)) // Keep last 100 lines
+          break
+      }
+    })
+
+    // Cleanup on unmount or serverId change
+    return () => {
+      ws.unsubscribe(serverId)
+      cleanup()
+    }
+  }, [serverId, ws.isAuthenticated])
+
+  return {
+    serverStatus,
+    consoleOutput,
+    sendCommand: (command: string) => {
+      if (serverId) {
+        ws.sendCommand(serverId, command)
+      }
+    },
+    clearConsole: () => setConsoleOutput([])
+  }
 }

@@ -18,19 +18,27 @@ enum UserRole {
 }
 
 enum ServerStatus {
+  CREATING
+  CREATED
   STOPPED
   STARTING
   RUNNING
   STOPPING
   CRASHED
+  REMOVING
+  REMOVED
 }
 
 enum TransactionType {
   CREDIT_PURCHASE
+  ADMIN_CREDITS
+  WELCOME_BONUS
   AD_REWARD
-  
+  TASK_REWARD
   SERVER_PAYMENT
   REFUND
+  COMPLETED
+  FAILED
 }
 
 enum TaskType {
@@ -87,6 +95,7 @@ model Node {
   maxRam        Int      @default(8192)  // MB
   maxDisk       Int      @default(100)   // GB
   maxServers    Int      @default(10)
+  status        String?  @default("OFFLINE")
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -108,14 +117,15 @@ model Server {
   port        Int?
   status      ServerStatus  @default(STOPPED)
   version     String        @default("1.20.1")
+  plugins     String[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   // Relations
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  node        Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  logs        ServerLog[]
-  connections WSConnection[]
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  node             Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  logs             ServerLog[]
+  connections      WSConnection[]
 
   @@map("servers")
 }
@@ -152,6 +162,7 @@ model Transaction {
   type        TransactionType
   amount      Int             // Credits (positive for earn, negative for spend)
   description String
+  status      String          @default("COMPLETED")
   createdAt   DateTime        @default(now())
 
   // Relations

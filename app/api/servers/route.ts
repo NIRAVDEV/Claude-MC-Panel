@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       const server = await tx.server.create({
         data: {
           name,
-          plan,
+          // plan,
           nodeId,
           userId: session.user.id,
           status: 'CREATING',
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       await tx.transaction.create({
         data: {
           userId: session.user.id,
-          type: 'DEBIT',
+          type: 'SERVER_PAYMENT',
           amount: cost,
           description: `Server creation: ${name}`,
           status: 'COMPLETED',
