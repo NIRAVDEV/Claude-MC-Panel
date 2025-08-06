@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
 
     // Check if node with same host already exists
     const existingNodeByHost = await prisma.node.findFirst({
-      where: { host }
+      where: { ip: host }
     })
 
     if (existingNodeByHost) {
