@@ -20,7 +20,7 @@ interface Server {
   containerId?: string
 }
 
-export default function ServerManagePage({ params }: { params: { id: string } }) {
+export default function ServerManagePage({ params }: any) {
   const { data: session } = useSession()
   const [server, setServer] = useState<Server | null>(null)
   const [isLoading, setIsLoading] = useState(true)
