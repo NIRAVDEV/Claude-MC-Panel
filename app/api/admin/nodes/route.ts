@@ -1,103 +1,248 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+// app/api/admin/nodes/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
-export async function GET(request: NextRequest) {
+// GET /api/admin/nodes - Get all nodes
+export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession(authOptions)
     
-    if (!session?.user?.role || session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 403 });
+    if (!session || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const nodes = await prisma.node.findMany({
       include: {
-        _count: {
+        servers: {
           select: {
-            servers: true,
-          },
-        },
+            id: true,
+            name: true,
+            status: true,
+          }
+        }
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+      orderBy: { name: 'asc' }
+    })
 
-    return NextResponse.json({ nodes });
+    return NextResponse.json(nodes)
   } catch (error) {
-    console.error('Error fetching nodes:', error);
+    console.error('Error fetching nodes:', error)
     return NextResponse.json(
       { error: 'Failed to fetch nodes' },
       { status: 500 }
-    );
+    )
   }
 }
 
+// POST /api/admin/nodes - Create a new node
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession(authOptions)
     
-    if (!session?.user?.role || session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 403 });
+    if (!session || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json();
-    const { 
-      name, 
-      location, 
-      ipAddress, 
-      maxMemory = 8192, 
-      maxStorage = 100, 
-      maxServers = 10 
-    } = body;
+    const body = await request.json()
+    const { name, host, port, maxRam, maxDisk, maxServers, isActive } = body
 
-    if (!name || !location || !ipAddress) {
+    // Validate required fields
+    if (!name || !host) {
       return NextResponse.json(
-        { error: 'Missing required fields: name, location, ipAddress' },
+        { error: 'Name and host are required' },
         { status: 400 }
-      );
+      )
     }
 
-    // Check if IP address is already used
-    const existingNode = await prisma.node.findUnique({
-      where: { ipAddress },
-    });
+    // Check if node with same name already exists
+    const existingNode = await prisma.node.findFirst({
+      where: { name }
+    })
 
     if (existingNode) {
       return NextResponse.json(
-        { error: 'Node with this IP address already exists' },
-        { status: 400 }
-      );
+        { error: 'Node with this name already exists' },
+        { status: 409 }
+      )
     }
 
+    // Create the node with fields that exist in schema
     const node = await prisma.node.create({
       data: {
         name,
-        location,
-        ipAddress,
-        maxMemory,
-        maxStorage,
-        maxServers,
-        status: 'ONLINE',
-        usedMemory: 0,
-        usedStorage: 0,
+        host,
+        port: port || 22, // Default SSH port
+        maxRam: maxRam || 8192, // Default 8GB
+        maxDisk: maxDisk || 100, // Default 100GB
+        maxServers: maxServers || 10, // Default 10 servers
+        isActive: isActive !== undefined ? isActive : true,
+        // Remove ipAddress and location if they don't exist in schema
+        // Add these back when schema is updated
       },
       include: {
-        _count: {
+        servers: {
           select: {
-            servers: true,
-          },
-        },
-      },
-    });
+            id: true,
+            name: true,
+            status: true,
+          }
+        }
+      }
+    })
 
-    return NextResponse.json({ node }, { status: 201 });
+    return NextResponse.json(node, { status: 201 })
   } catch (error) {
-    console.error('Error creating node:', error);
+    console.error('Error creating node:', error)
     return NextResponse.json(
       { error: 'Failed to create node' },
       { status: 500 }
-    );
+    )
+  }
+}
+
+// PUT /api/admin/nodes - Update a node
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    
+    if (!session || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { id, name, host, port, maxRam, maxDisk, maxServers, isActive } = body
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Node ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if node exists
+    const existingNode = await prisma.node.findUnique({
+      where: { id }
+    })
+
+    if (!existingNode) {
+      return NextResponse.json(
+        { error: 'Node not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if name is being changed and conflicts with another node
+    if (name && name !== existingNode.name) {
+      const nameConflict = await prisma.node.findFirst({
+        where: { 
+          name,
+          id: { not: id }
+        }
+      })
+
+      if (nameConflict) {
+        return NextResponse.json(
+          { error: 'Node with this name already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
+    const updatedNode = await prisma.node.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(host && { host }),
+        ...(port !== undefined && { port }),
+        ...(maxRam !== undefined && { maxRam }),
+        ...(maxDisk !== undefined && { maxDisk }),
+        ...(maxServers !== undefined && { maxServers }),
+        ...(isActive !== undefined && { isActive }),
+        // Remove ipAddress and location until schema is updated
+      },
+      include: {
+        servers: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+          }
+        }
+      }
+    })
+
+    return NextResponse.json(updatedNode)
+  } catch (error) {
+    console.error('Error updating node:', error)
+    return NextResponse.json(
+      { error: 'Failed to update node' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/admin/nodes - Delete a node
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    
+    if (!session || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Node ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if node exists
+    const existingNode = await prisma.node.findUnique({
+      where: { id },
+      include: {
+        servers: true
+      }
+    })
+
+    if (!existingNode) {
+      return NextResponse.json(
+        { error: 'Node not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if node has active servers
+    const activeServers = existingNode.servers.filter(server => 
+      server.status === 'RUNNING' || server.status === 'STARTING'
+    )
+
+    if (activeServers.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Cannot delete node with active servers. Please stop or migrate servers first.',
+          activeServers: activeServers.length
+        },
+        { status: 400 }
+      )
+    }
+
+    // Delete the node (cascade will handle related records)
+    await prisma.node.delete({
+      where: { id }
+    })
+
+    return NextResponse.json({ message: 'Node deleted successfully' })
+  } catch (error) {
+    console.error('Error deleting node:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete node' },
+      { status: 500 }
+    )
   }
 }
