@@ -4,6 +4,23 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
+/**
+ * NODE MODEL FIELD EXPLANATION:
+ * 
+ * - host: Can be IP address OR FQDN (Fully Qualified Domain Name)
+ *   Examples: "192.168.1.100", "node1.minecrafthost.com"
+ * 
+ * - ipAddress: The actual IP address of the node (resolved from FQDN if needed)
+ *   Always an IP: "192.168.1.100"
+ * 
+ * - port: The DAEMON port for our hosting service communication (NOT SSH)
+ *   Default: 2022 (custom daemon), NOT 22 (SSH)
+ *   This is the port our hosting panel communicates with the node daemon
+ * 
+ * - location: Physical/logical location of the node
+ *   Examples: "US-East", "Europe-Germany", "Asia-Singapore"
+ */
+
 // GET /api/admin/nodes - Get all nodes
 export async function GET() {
   try {
@@ -21,12 +38,25 @@ export async function GET() {
             name: true,
             status: true,
           }
+        },
+        _count: {
+          select: {
+            servers: true
+          }
         }
       },
       orderBy: { name: 'asc' }
     })
 
-    return NextResponse.json(nodes)
+    // Add computed fields for better admin overview
+    const nodesWithStats = nodes.map(node => ({
+      ...node,
+      serverCount: node._count.servers,
+      utilizationRam: Math.round((node.servers.length * 1024 / node.maxRam) * 100), // Rough estimate
+      utilizationServers: Math.round((node.servers.length / node.maxServers) * 100)
+    }))
+
+    return NextResponse.json(nodesWithStats)
   } catch (error) {
     console.error('Error fetching nodes:', error)
     return NextResponse.json(
@@ -48,10 +78,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { 
       name, 
-      host, 
-      port, 
-      ipAddress, 
-      location, 
+      host,        // Can be IP or FQDN
+      port,        // Daemon port (default 2022, NOT SSH port 22)
+      ipAddress,   // Resolved IP address
+      location,    // Geographic/logical location
       maxRam, 
       maxDisk, 
       maxServers, 
@@ -61,34 +91,63 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!name || !host) {
       return NextResponse.json(
-        { error: 'Name and host are required' },
+        { error: 'Name and host (IP or FQDN) are required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate host format (basic check for IP or domain)
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
+    const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/
+    
+    if (!ipRegex.test(host) && !domainRegex.test(host)) {
+      return NextResponse.json(
+        { error: 'Host must be a valid IP address or FQDN' },
         { status: 400 }
       )
     }
 
     // Check if node with same name already exists
-    const existingNode = await prisma.node.findFirst({
+    const existingNodeByName = await prisma.node.findFirst({
       where: { name }
     })
 
-    if (existingNode) {
+    if (existingNodeByName) {
       return NextResponse.json(
         { error: 'Node with this name already exists' },
         { status: 409 }
       )
     }
 
-    // Create the node with all available fields
+    // Check if node with same host already exists
+    const existingNodeByHost = await prisma.node.findFirst({
+      where: { host }
+    })
+
+    if (existingNodeByHost) {
+      return NextResponse.json(
+        { error: 'Node with this host already exists' },
+        { status: 409 }
+      )
+    }
+
+    // If ipAddress is not provided and host is an IP, use host as ipAddress
+    let resolvedIpAddress = ipAddress
+    if (!resolvedIpAddress && ipRegex.test(host)) {
+      resolvedIpAddress = host
+    }
+
+    // Create the node with proper field understanding
     const node = await prisma.node.create({
       data: {
         name,
-        host,
-        port: port || 22, // Default SSH port
-        ipAddress: ipAddress || null, // Optional field
-        location: location || null, // Optional field
-        maxRam: maxRam || 8192, // Default 8GB
-        maxDisk: maxDisk || 100, // Default 100GB
-        maxServers: maxServers || 10, // Default 10 servers
+        host,                                    // IP or FQDN
+        port: port || 2022,                     // Daemon port (NOT SSH port)
+        ipAddress: resolvedIpAddress || null,   // Actual IP address
+        location: location || null,             // Geographic location
+        maxRam: maxRam || 8192,                // Default 8GB RAM
+        maxDisk: maxDisk || 100,               // Default 100GB disk
+        maxServers: maxServers || 10,          // Default 10 servers
         isActive: isActive !== undefined ? isActive : true,
       },
       include: {
@@ -142,7 +201,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Check if node exists using id (which should be unique)
+    // Check if node exists
     const existingNode = await prisma.node.findUnique({
       where: { id }
     })
@@ -154,7 +213,20 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Check if name is being changed and conflicts with another node
+    // Validate host format if being updated
+    if (host) {
+      const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
+      const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/
+      
+      if (!ipRegex.test(host) && !domainRegex.test(host)) {
+        return NextResponse.json(
+          { error: 'Host must be a valid IP address or FQDN' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Check for conflicts
     if (name && name !== existingNode.name) {
       const nameConflict = await prisma.node.findFirst({
         where: { 
@@ -171,19 +243,37 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    if (host && host !== existingNode.host) {
+      const hostConflict = await prisma.node.findFirst({
+        where: { 
+          host,
+          id: { not: id }
+        }
+      })
+
+      if (hostConflict) {
+        return NextResponse.json(
+          { error: 'Node with this host already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
+    // Prepare update data
+    const updateData: any = {}
+    if (name !== undefined) updateData.name = name
+    if (host !== undefined) updateData.host = host
+    if (port !== undefined) updateData.port = port
+    if (ipAddress !== undefined) updateData.ipAddress = ipAddress
+    if (location !== undefined) updateData.location = location
+    if (maxRam !== undefined) updateData.maxRam = maxRam
+    if (maxDisk !== undefined) updateData.maxDisk = maxDisk
+    if (maxServers !== undefined) updateData.maxServers = maxServers
+    if (isActive !== undefined) updateData.isActive = isActive
+
     const updatedNode = await prisma.node.update({
       where: { id },
-      data: {
-        ...(name && { name }),
-        ...(host && { host }),
-        ...(port !== undefined && { port }),
-        ...(ipAddress !== undefined && { ipAddress }),
-        ...(location !== undefined && { location }),
-        ...(maxRam !== undefined && { maxRam }),
-        ...(maxDisk !== undefined && { maxDisk }),
-        ...(maxServers !== undefined && { maxServers }),
-        ...(isActive !== undefined && { isActive }),
-      },
+      data: updateData,
       include: {
         servers: {
           select: {
@@ -239,16 +329,28 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Check if node has active servers
-    const activeServers = existingNode.servers.filter(server => 
-      server.status === 'RUNNING' || server.status === 'STARTING'
-    )
+    // Check if node has any servers (active or inactive)
+    if (existingNode.servers.length > 0) {
+      const activeServers = existingNode.servers.filter(server => 
+        server.status === 'RUNNING' || server.status === 'STARTING'
+      )
 
-    if (activeServers.length > 0) {
+      if (activeServers.length > 0) {
+        return NextResponse.json(
+          { 
+            error: 'Cannot delete node with active servers. Please stop servers first.',
+            activeServers: activeServers.length,
+            totalServers: existingNode.servers.length
+          },
+          { status: 400 }
+        )
+      }
+
+      // If there are inactive servers, warn but allow deletion
       return NextResponse.json(
         { 
-          error: 'Cannot delete node with active servers. Please stop or migrate servers first.',
-          activeServers: activeServers.length
+          error: 'Node has inactive servers. Are you sure you want to delete? This will remove all associated servers.',
+          totalServers: existingNode.servers.length
         },
         { status: 400 }
       )
@@ -259,11 +361,19 @@ export async function DELETE(request: NextRequest) {
       where: { id }
     })
 
-    return NextResponse.json({ message: 'Node deleted successfully' })
+    return NextResponse.json({ 
+      message: 'Node deleted successfully',
+      deletedNode: {
+        id: existingNode.id,
+        name: existingNode.name,
+        host: existingNode.host
+      }
+    })
   } catch (error) {
     console.error('Error deleting node:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete node' },
+      { status: 500 }
+    )
+  }
 }
-  
-return NextResponse.json()
-}
-      
