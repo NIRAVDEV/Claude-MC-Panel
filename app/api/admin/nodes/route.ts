@@ -262,5 +262,5 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: 'Node deleted successfully' })
   } catch (error) {
     console.error('Error deleting node:', error)
-    return NextResponse.json(
+    return NextResponse.json()
       
