@@ -46,7 +46,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, host, port, maxRam, maxDisk, maxServers, isActive } = body
+    const { 
+      name, 
+      host, 
+      port, 
+      ipAddress, 
+      location, 
+      maxRam, 
+      maxDisk, 
+      maxServers, 
+      isActive 
+    } = body
 
     // Validate required fields
     if (!name || !host) {
@@ -68,18 +78,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create the node with fields that exist in schema
+    // Create the node with all available fields
     const node = await prisma.node.create({
       data: {
         name,
         host,
         port: port || 22, // Default SSH port
+        ipAddress: ipAddress || null, // Optional field
+        location: location || null, // Optional field
         maxRam: maxRam || 8192, // Default 8GB
         maxDisk: maxDisk || 100, // Default 100GB
         maxServers: maxServers || 10, // Default 10 servers
         isActive: isActive !== undefined ? isActive : true,
-        // Remove ipAddress and location if they don't exist in schema
-        // Add these back when schema is updated
       },
       include: {
         servers: {
@@ -112,7 +122,18 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, name, host, port, maxRam, maxDisk, maxServers, isActive } = body
+    const { 
+      id, 
+      name, 
+      host, 
+      port, 
+      ipAddress, 
+      location, 
+      maxRam, 
+      maxDisk, 
+      maxServers, 
+      isActive 
+    } = body
 
     if (!id) {
       return NextResponse.json(
@@ -121,7 +142,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Check if node exists
+    // Check if node exists using id (which should be unique)
     const existingNode = await prisma.node.findUnique({
       where: { id }
     })
@@ -156,11 +177,12 @@ export async function PUT(request: NextRequest) {
         ...(name && { name }),
         ...(host && { host }),
         ...(port !== undefined && { port }),
+        ...(ipAddress !== undefined && { ipAddress }),
+        ...(location !== undefined && { location }),
         ...(maxRam !== undefined && { maxRam }),
         ...(maxDisk !== undefined && { maxDisk }),
         ...(maxServers !== undefined && { maxServers }),
         ...(isActive !== undefined && { isActive }),
-        // Remove ipAddress and location until schema is updated
       },
       include: {
         servers: {
@@ -241,8 +263,4 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('Error deleting node:', error)
     return NextResponse.json(
-      { error: 'Failed to delete node' },
-      { status: 500 }
-    )
-  }
-}
+      
