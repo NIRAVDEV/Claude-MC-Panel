@@ -28,7 +28,7 @@ enum ServerStatus {
 enum TransactionType {
   CREDIT_PURCHASE
   AD_REWARD
-  TASK_REWARD
+  
   SERVER_PAYMENT
   REFUND
 }
@@ -81,7 +81,7 @@ model Node {
   id            String   @id @default(cuid())
   name          String   @unique
   host          String
-  port          Int      @default(22)
+  port          Int      @default(25575)
   ipAddress     String?  // Added missing field
   location      String?  // Added missing field
   maxRam        Int      @default(8192)  // MB

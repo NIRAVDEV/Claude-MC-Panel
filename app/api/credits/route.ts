@@ -93,10 +93,10 @@ export async function POST(request: NextRequest) {
       const transaction = await tx.transaction.create({
         data: {
           userId: session.user.id,
-          type: 'CREDIT',
+          type: action === 'earn' ? 'AD_REWARD' : 'CREDIT_PURCHASE',
           amount,
           description: description || `Credits ${action}ed`,
-          status: 'COMPLETED',
+          // status: 'COMPLETED',
         },
       });
 

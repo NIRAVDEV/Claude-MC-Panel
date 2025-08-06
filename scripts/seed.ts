@@ -15,13 +15,14 @@ async function main() {
 
   console.log('🗑️  Cleared existing data');
 
-  // Create demo users (without hashed passwords for now - will be handled by auth system)
+  // Create demo users (with passwordHash if your schema requires it)
   const adminUser = await prisma.user.create({
     data: {
       email: 'admin@minecrafthost.com',
       name: 'Admin User',
       role: 'ADMIN',
       credits: 10000,
+      passwordHash: await bcrypt.hash('adminpassword', 10),
     },
   });
 
@@ -31,50 +32,52 @@ async function main() {
       name: 'Regular User',
       role: 'USER',
       credits: 500,
+      passwordHash: await bcrypt.hash('userpassword', 10),
     },
   });
 
   console.log('👥 Created demo users');
 
-  // Create demo nodes (remove location field)
+  // Create demo nodes
   const nodes = await Promise.all([
     prisma.node.create({
       data: {
         name: 'US-East-1',
-        ip: '192.168.1.100',
+        host: '192.168.1.100',
         maxRam: 16384,
-        maxStorage: 500,
-        usedRam: 2048,
-        usedStorage: 50,
-        status: 'ONLINE',
+        maxDisk : 500,
+        // usedRam: 2048,
+        // usedStorage: 50,
+        // status: 'ONLINE',
       },
     }),
     prisma.node.create({
       data: {
         name: 'EU-West-1',
-        ip: '192.168.1.101',
+        host: '192.168.1.101',
         maxRam: 12288,
-        maxStorage: 300,
+        maxDisk : 300,
         // usedRam: 1024,
-       // usedStorage: 30,
-        status: 'ONLINE',
+        // usedStorage: 30,
+        // status: 'ONLINE',
+      },
     }),
     prisma.node.create({
       data: {
         name: 'Asia-Pacific',
-        ipAddress: '192.168.1.102',
-        maxMemory: 8192,
-        maxStorage: 200,
-        maxMemory: 8192,
-        maxStorage: 200,
-        usedMemory: 512,
-        usedStorage: 20,
-        status: 'MAINTENANCE',
+        host: '192.168.1.102',
+        maxRam: 8192,
+        maxDisk : 200,
+        // usedRam: 512,
+        // usedStorage: 20,
+        // status: 'MAINTENANCE',
+      },
+    }),
   ]);
 
   console.log('🖥️  Created demo nodes');
 
-  // Create demo servers (remove plan field)
+  // Create demo servers
   const servers = await Promise.all([
     prisma.server.create({
       data: {
@@ -83,9 +86,9 @@ async function main() {
         port: 25565,
         userId: regularUser.id,
         nodeId: nodes[0].id,
-        dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
+        // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
         version: '1.20.1',
-        plugins: ['EssentialsX', 'WorldEdit', 'LuckPerms'],
+        // plugins: ['EssentialsX', 'WorldEdit', 'LuckPerms'],
       },
     }),
     prisma.server.create({
@@ -95,9 +98,9 @@ async function main() {
         port: 25566,
         userId: regularUser.id,
         nodeId: nodes[1].id,
-        dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
+        // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
         version: '1.20.1',
-        plugins: ['WorldEdit', 'FastAsyncWorldEdit', 'VoxelSniper'],
+        // plugins: ['WorldEdit', 'FastAsyncWorldEdit', 'VoxelSniper'],
       },
     }),
     prisma.server.create({
@@ -107,64 +110,61 @@ async function main() {
         port: 25567,
         userId: adminUser.id,
         nodeId: nodes[0].id,
-        dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
+        // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
         version: '1.19.4',
-        plugins: ['Essentials'],
+        // plugins: ['Essentials'],
       },
     }),
   ]);
 
   console.log('🎮 Created demo servers');
 
-  // Create demo transactions (fix transaction types)
+  // Create demo transactions
   const transactions = await Promise.all([
     prisma.transaction.create({
       data: {
         userId: regularUser.id,
-        type: 'EARN',
+        type: 'TASK_REWARD',
         amount: 500,
         description: 'Welcome bonus',
-        status: 'COMPLETED',
+        // status: 'COMPLETED',
       },
     }),
     prisma.transaction.create({
       data: {
         userId: regularUser.id,
-        type: 'SPEND',
+        type: 'SERVER_PAYMENT',
         amount: 200,
         description: 'Server creation: My Survival Server',
-        status: 'COMPLETED',
+        // status: 'COMPLETED',
       },
     }),
     prisma.transaction.create({
       data: {
         userId: regularUser.id,
-        type: 'EARN',
+        type: 'TASK_REWARD',
         amount: 100,
         description: 'Completed survey',
-        status: 'COMPLETED',
+        // status: 'COMPLETED',
       },
     }),
     prisma.transaction.create({
       data: {
         userId: adminUser.id,
-        type: 'EARN',
+        type: 'REFUND',
         amount: 10000,
         description: 'Admin credits',
-        status: 'COMPLETED',
+        // status: 'COMPLETED',
       },
     }),
   ]);
 
   console.log('💰 Created demo transactions');
 
-  // Remove server logs creation since the model doesn't exist
-  console.log('📝 Skipped server logs (model not in schema)');
-
   console.log('✅ Database seeded successfully!');
   console.log('\n🔑 Demo Accounts:');
-  console.log('Admin: admin@minecrafthost.com / (set up via auth)');
-  console.log('User:  user@minecrafthost.com / (set up via auth)');
+  console.log('Admin: admin@minecrafthost.com / adminpassword');
+  console.log('User:  user@minecrafthost.com / userpassword');
   console.log('\n🚀 You can now start the application!');
 }
 
@@ -176,3 +176,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+  console.log('🌱 Database seed script completed.');
