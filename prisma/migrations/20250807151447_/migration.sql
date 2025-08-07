@@ -5,13 +5,13 @@ CREATE TYPE "UserRole" AS ENUM ('USER', 'ADMIN');
 CREATE TYPE "NodeStatus" AS ENUM ('ONLINE', 'OFFLINE', 'MAINTENANCE', 'ERROR');
 
 -- CreateEnum
-CREATE TYPE "ServerStatus" AS ENUM ('RUNNING', 'STOPPED', 'STARTING', 'STOPPING', 'ERROR', 'INSTALLING');
+CREATE TYPE "ServerStatus" AS ENUM ('CREATING', 'CREATED', 'RUNNING', 'STOPPED', 'STARTING', 'STOPPING', 'ERROR', 'INSTALLING', 'REMOVING', 'REMOVED');
 
 -- CreateEnum
 CREATE TYPE "LogLevel" AS ENUM ('DEBUG', 'INFO', 'WARN', 'ERROR');
 
 -- CreateEnum
-CREATE TYPE "TransactionType" AS ENUM ('CREDIT_PURCHASE', 'SERVER_COST', 'AD_REWARD', 'TASK_REWARD', 'REFERRAL_BONUS', 'ADMIN_ADJUSTMENT');
+CREATE TYPE "TransactionType" AS ENUM ('CREDIT_PURCHASE', 'SERVER_COST', 'ADMIN_CREDITS', 'WELCOME_BONUS', 'AD_REWARD', 'TASK_REWARD', 'REFERRAL_BONUS', 'ADMIN_ADJUSTMENT', 'COMPLETED', 'FAILED');
 
 -- CreateEnum
 CREATE TYPE "TicketStatus" AS ENUM ('OPEN', 'IN_PROGRESS', 'WAITING_USER', 'RESOLVED', 'CLOSED');
@@ -53,6 +53,17 @@ CREATE TABLE "nodes" (
     "maxStorage" INTEGER NOT NULL DEFAULT 500000,
     "location" TEXT,
     "status" "NodeStatus" NOT NULL DEFAULT 'OFFLINE',
+    "description" TEXT,
+    "scheme" TEXT NOT NULL DEFAULT 'https',
+    "behindProxy" BOOLEAN NOT NULL DEFAULT false,
+    "maintenanceMode" BOOLEAN NOT NULL DEFAULT false,
+    "publicNode" BOOLEAN NOT NULL DEFAULT true,
+    "totalMemory" INTEGER NOT NULL DEFAULT 5120,
+    "memoryOverallocation" INTEGER NOT NULL DEFAULT 0,
+    "totalDiskSpace" INTEGER NOT NULL DEFAULT 102400,
+    "diskOverallocation" INTEGER NOT NULL DEFAULT 0,
+    "daemonPort" INTEGER NOT NULL DEFAULT 8080,
+    "daemonSftpPort" INTEGER NOT NULL DEFAULT 2022,
     "verificationToken" TEXT NOT NULL,
     "usedRAM" INTEGER NOT NULL DEFAULT 0,
     "usedStorage" INTEGER NOT NULL DEFAULT 0,
@@ -125,6 +136,7 @@ CREATE TABLE "transactions" (
     "amount" INTEGER NOT NULL,
     "type" "TransactionType" NOT NULL,
     "description" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'COMPLETED',
     "metadata" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

@@ -1,619 +1,895 @@
-'use client';
+// ./app/node/page.tsx
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Server, Plus, Edit, Trash2, Activity, HardDrive, Cpu, MemoryStick, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { useToast } from '@/lib/hooks/use-toast';
+import { useState, useEffect } from 'react'
+import { Plus, Server, MapPin, Users, Activity, Settings, Trash2, Edit, Shield } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { toast } from '@/components/ui/use-toast'
 
 interface Node {
-  id: string;
-  name: string;
-  host: string;
-  port: number;
-  status: 'online' | 'offline' | 'maintenance';
-  region: string;
-  maxRam: number;
-  maxStorage: number;
-  usedRam: number;
-  usedStorage: number;
-  serverCount: number;
-  cpuUsage: number;
-  uptime: number;
-  lastPing: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  id: string
+  name: string
+  location: string
+  status: 'ONLINE' | 'OFFLINE' | 'MAINTENANCE' | null | undefined
+  maxServers: number
+  currentServers?: number
+  cpuUsage?: number
+  ramUsage?: number
+  diskUsage?: number
+  verificationToken?: string
+  createdAt: string
+  updatedAt: string
+  servers?: {
+    id: string
+    name: string
+    status: string
+  }[]
 }
 
-const NodesPage = () => {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editingNode, setEditingNode] = useState<Node | null>(null);
-  const { toast } = useToast();
+interface CreateNodeData {
+  name: string
+  description?: string
+  location: string
+  fqdn: string
+  scheme: 'http' | 'https'
+  behindProxy: boolean
+  maintenanceMode: boolean
+  maxServers: number
+  totalMemory: number
+  memoryOverallocation: number
+  totalDiskSpace: number
+  diskOverallocation: number
+  daemonPort: number
+  daemonSftpPort: number
+  publicNode: boolean
+}
 
-  // Form state
-  const [formData, setFormData] = useState({
+export default function NodesPage() {
+  const [nodes, setNodes] = useState<Node[]>([])
+  const [loading, setLoading] = useState(true)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
+  const [createFormData, setCreateFormData] = useState<CreateNodeData>({
     name: '',
-    host: '',
-    port: 2376,
-    region: '',
-    maxRam: 16,
-    maxStorage: 500,
-    description: ''
-  });
+    description: '',
+    location: '',
+    fqdn: '',
+    scheme: 'https',
+    behindProxy: false,
+    maintenanceMode: false,
+    maxServers: 10,
+    totalMemory: 5120,
+    memoryOverallocation: 0,
+    totalDiskSpace: 102400,
+    diskOverallocation: 0,
+    daemonPort: 8080,
+    daemonSftpPort: 2022,
+    publicNode: true
+  })
 
-  useEffect(() => {
-    fetchNodes();
-  }, []);
+  // Status badge configuration with safe defaults
+  const getStatusBadge = (status: string | null | undefined) => {
+    const statusConfig = {
+      ONLINE: {
+        variant: 'default' as const,
+        icon: Activity,
+        color: 'text-green-600',
+        label: 'Online'
+      },
+      OFFLINE: {
+        variant: 'secondary' as const,
+        icon: Server,
+        color: 'text-gray-500',
+        label: 'Offline'
+      },
+      MAINTENANCE: {
+        variant: 'destructive' as const,
+        icon: Settings,
+        color: 'text-yellow-600',
+        label: 'Maintenance'
+      }
+    }
+
+    // Default to OFFLINE if status is null, undefined, or unknown
+    const safeStatus = status && status in statusConfig ? status as keyof typeof statusConfig : 'OFFLINE'
+    const config = statusConfig[safeStatus]
+    const IconComponent = config.icon
+
+    return (
+      <Badge variant={config.variant} className="flex items-center gap-1">
+        <IconComponent className={`h-3 w-3 ${config.color}`} />
+        {config.label}
+      </Badge>
+    )
+  }
 
   const fetchNodes = async () => {
     try {
-      const response = await fetch('/api/admin/nodes');
-      if (response.ok) {
-        const data = await response.json();
-        setNodes(data);
+      const response = await fetch('/api/admin/nodes')
+      if (!response.ok) {
+        throw new Error('Failed to fetch nodes')
       }
+      const data = await response.json()
+      setNodes(data)
     } catch (error) {
+      console.error('Error fetching nodes:', error)
       toast({
         title: "Error",
         description: "Failed to fetch nodes",
         variant: "destructive",
-      });
+      })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleCreateNode = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
+
+    // Validate required fields and debug
+    const requiredFields = [
+      'name',
+      'location',
+      'fqdn',
+      'scheme',
+      'behindProxy',
+      'maintenanceMode',
+      'publicNode',
+      'maxServers',
+      'totalMemory',
+      'memoryOverallocation',
+      'totalDiskSpace',
+      'diskOverallocation',
+      'daemonPort',
+      'daemonSftpPort',
+    ]
+    let missingFields: string[] = []
+    for (const field of requiredFields) {
+      const value = (createFormData as any)[field]
+      if (
+        value === undefined ||
+        value === null ||
+        (typeof value === 'string' && value.trim() === '') ||
+        (typeof value === 'number' && isNaN(value))
+      ) {
+        missingFields.push(field)
+      }
+    }
+    // Debug: log payload and missing fields to console and show as plain string in toast
+    const debugPayload = { ...createFormData, ip: createFormData.fqdn, port: createFormData.daemonPort };
+    console.log('[Node Create] Payload:', debugPayload);
+    if (missingFields.length > 0) {
+      console.warn('[Node Create] Missing/Invalid fields:', missingFields);
+    }
+    toast({
+      title: 'Debug Node Payload',
+      description:
+        'Payload: ' + JSON.stringify(debugPayload, null, 2) +
+        (missingFields.length > 0 ? '\nMissing/Invalid: ' + missingFields.join(', ') : ''),
+      variant: missingFields.length > 0 ? 'destructive' : 'default',
+    })
+    if (missingFields.length > 0) {
+      return
+    }
+
     try {
       const response = await fetch('/api/admin/nodes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
-      });
+        body: JSON.stringify({
+          ...createFormData,
+          ip: createFormData.fqdn, // Use fqdn as IP for now
+          port: createFormData.daemonPort, // Map daemonPort to port for backend
+        }),
+      })
 
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Node created successfully",
-        });
-        fetchNodes();
-        setIsCreateOpen(false);
-        resetForm();
-      } else {
-        throw new Error('Failed to create node');
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to create node')
       }
+
+      await response.json()
+      toast({
+        title: "Success",
+        description: "Node created successfully",
+      })
+      setCreateDialogOpen(false)
+      setCreateFormData({
+        name: '',
+        description: '',
+        location: '',
+        fqdn: '',
+        scheme: 'https',
+        behindProxy: false,
+        maintenanceMode: false,
+        maxServers: 10,
+        totalMemory: 5120,
+        memoryOverallocation: 0,
+        totalDiskSpace: 102400,
+        diskOverallocation: 0,
+        daemonPort: 8080,
+        daemonSftpPort: 2022,
+        publicNode: true
+      })
+      fetchNodes()
     } catch (error) {
+      console.error('Error creating node:', error)
       toast({
         title: "Error",
-        description: "Failed to create node",
+        description: error instanceof Error ? error.message : "Failed to create node",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
-  const handleUpdateNode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingNode) return;
+  const handleEditNode = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!selectedNode) return
 
     try {
-      const response = await fetch(`/api/admin/nodes/${editingNode.id}`, {
+      const response = await fetch(`/api/admin/nodes?id=${selectedNode.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
-      });
+        body: JSON.stringify({
+          name: selectedNode.name,
+          location: selectedNode.location,
+          maxServers: selectedNode.maxServers,
+          status: selectedNode.status
+        }),
+      })
 
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Node updated successfully",
-        });
-        fetchNodes();
-        setEditingNode(null);
-        resetForm();
-      } else {
-        throw new Error('Failed to update node');
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update node')
       }
+
+      toast({
+        title: "Success",
+        description: "Node updated successfully",
+      })
+      
+      setEditDialogOpen(false)
+      setSelectedNode(null)
+      fetchNodes()
     } catch (error) {
+      console.error('Error updating node:', error)
       toast({
         title: "Error",
-        description: "Failed to update node",
+        description: error instanceof Error ? error.message : "Failed to update node",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
   const handleDeleteNode = async (nodeId: string) => {
-    if (!confirm('Are you sure you want to delete this node?')) return;
+    if (!confirm('Are you sure you want to delete this node? This action cannot be undone.')) {
+      return
+    }
 
     try {
-      const response = await fetch(`/api/admin/nodes/${nodeId}`, {
+      const response = await fetch(`/api/admin/nodes?id=${nodeId}`, {
         method: 'DELETE',
-      });
+      })
 
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Node deleted successfully",
-        });
-        fetchNodes();
-      } else {
-        throw new Error('Failed to delete node');
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete node')
       }
+
+      toast({
+        title: "Success",
+        description: "Node deleted successfully",
+      })
+      
+      fetchNodes()
     } catch (error) {
+      console.error('Error deleting node:', error)
       toast({
         title: "Error",
-        description: "Failed to delete node",
+        description: error instanceof Error ? error.message : "Failed to delete node",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      host: '',
-      port: 2376,
-      region: '',
-      maxRam: 16,
-      maxStorage: 500,
-      description: ''
-    });
-  };
+  const openEditDialog = (node: Node) => {
+    setSelectedNode(node)
+    setEditDialogOpen(true)
+  }
 
-  const getStatusBadge = (status: Node['status']) => {
-    const statusConfig = {
-      online: { variant: 'default' as const, icon: CheckCircle, color: 'text-green-600' },
-      offline: { variant: 'destructive' as const, icon: XCircle, color: 'text-red-600' },
-      maintenance: { variant: 'secondary' as const, icon: Clock, color: 'text-yellow-600' }
-    };
+  const handleInputChange = (field: keyof CreateNodeData, value: string | number | boolean) => {
+    setCreateFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
 
-    const config = statusConfig[status];
-    const Icon = config.icon;
+  const handleEditInputChange = (field: keyof Node, value: string | number) => {
+    if (!selectedNode) return
+    
+    setSelectedNode(prev => prev ? ({
+      ...prev,
+      [field]: value
+    }) : null)
+  }
 
-    return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
-        <Icon className={`h-3 w-3 ${config.color}`} />
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Badge>
-    );
-  };
-
-  const formatBytes = (bytes: number) => {
-    return `${bytes} GB`;
-  };
-
-  const formatUptime = (hours: number) => {
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
-    return `${days}d ${remainingHours}h`;
-  };
+  useEffect(() => {
+    fetchNodes()
+  }, [])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
       </div>
-    );
+    )
   }
+
+  const totalNodes = nodes.length
+  const onlineNodes = nodes.filter(node => node.status === 'ONLINE').length
+  const totalServers = nodes.reduce((sum, node) => sum + (node.servers?.length || 0), 0)
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Node Management</h1>
-          <p className="text-gray-600 mt-2">Manage hosting nodes and infrastructure</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Node Management</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">
+            Manage your hosting infrastructure and server nodes
+          </p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+
+        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
               Add Node
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Node</DialogTitle>
               <DialogDescription>
-                Add a new hosting node to the platform
+                Create a new local or remote node for servers to be installed to.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleCreateNode}>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleCreateNode} className="space-y-6">
+              {/* Basic Details Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 text-blue-600">Basic Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="name">Node Name</Label>
+                    <Label htmlFor="name">Name *</Label>
                     <Input
                       id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="US-East-1"
+                      value={createFormData.name}
+                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      placeholder="e.g., node1"
                       required
                     />
+                    <p className="text-xs text-gray-500 mt-1">Character limits: a-z A-Z 0-9 _ . and -, max 100 characters</p>
                   </div>
+                  
                   <div>
-                    <Label htmlFor="region">Region</Label>
-                    <Select value={formData.region} onValueChange={(value) => setFormData({ ...formData, region: value })}>
+                    <Label htmlFor="location">Location *</Label>
+                    <Select
+                      value={createFormData.location}
+                      onValueChange={(value) => handleInputChange('location', value)}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select region" />
+                        <SelectValue placeholder="Select location" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="us-east-1">US East (N. Virginia)</SelectItem>
-                        <SelectItem value="us-west-1">US West (N. California)</SelectItem>
-                        <SelectItem value="eu-west-1">Europe (Ireland)</SelectItem>
-                        <SelectItem value="ap-southeast-1">Asia Pacific (Singapore)</SelectItem>
+                        <SelectItem value="us_east">US East</SelectItem>
+                        <SelectItem value="us_west">US West</SelectItem>
+                        <SelectItem value="eu_central">EU Central</SelectItem>
+                        <SelectItem value="asia_pacific">Asia Pacific</SelectItem>
+                        <SelectItem value="custom">Custom Location</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="host">Host Address</Label>
-                    <Input
-                      id="host"
-                      value={formData.host}
-                      onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                      placeholder="192.168.1.100"
-                      required
+                  
+                  <div className="md:col-span-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={createFormData.description}
+                      onChange={(e) => handleInputChange('description', e.target.value)}
+                      placeholder="Enter description for this node..."
+                      rows={3}
                     />
                   </div>
+                  
                   <div>
-                    <Label htmlFor="port">Port</Label>
+                    <Label>Node Visibility</Label>
+                    <div className="flex items-center space-x-4 mt-2">
+                      <div className="flex items-center">
+                        <input
+                          type="radio"
+                          id="public"
+                          name="visibility"
+                          checked={createFormData.publicNode}
+                          onChange={() => handleInputChange('publicNode', true)}
+                          className="mr-2"
+                        />
+                        <Label htmlFor="public">Public</Label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="radio"
+                          id="private"
+                          name="visibility"
+                          checked={!createFormData.publicNode}
+                          onChange={() => handleInputChange('publicNode', false)}
+                          className="mr-2"
+                        />
+                        <Label htmlFor="private">Private</Label>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">By setting a node to private, you will be denying the ability to auto-deploy to this node.</p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="fqdn">FQDN *</Label>
                     <Input
-                      id="port"
-                      type="number"
-                      value={formData.port}
-                      onChange={(e) => setFormData({ ...formData, port: parseInt(e.target.value) })}
-                      placeholder="2376"
+                      id="fqdn"
+                      value={createFormData.fqdn}
+                      onChange={(e) => handleInputChange('fqdn', e.target.value)}
+                      placeholder="e.g., 192.168.1.37 or node.example.com"
                       required
                     />
+                    <p className="text-xs text-gray-500 mt-1">Please enter domain name (e.g. node.example.com) to be used for connecting to the daemon. An IP address may be used only if you are not using SSL for this node.</p>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="maxRam">Max RAM (GB)</Label>
-                    <Input
-                      id="maxRam"
-                      type="number"
-                      value={formData.maxRam}
-                      onChange={(e) => setFormData({ ...formData, maxRam: parseInt(e.target.value) })}
-                      min="1"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="maxStorage">Max Storage (GB)</Label>
-                    <Input
-                      id="maxStorage"
-                      type="number"
-                      value={formData.maxStorage}
-                      onChange={(e) => setFormData({ ...formData, maxStorage: parseInt(e.target.value) })}
-                      min="10"
-                      required
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="description">Description (Optional)</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Additional notes about this node..."
-                  />
                 </div>
               </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+
+              {/* Configuration Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 text-blue-600">Configuration</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="totalMemory">Total Memory *</Label>
+                    <div className="flex">
+                      <Input
+                        id="totalMemory"
+                        type="number"
+                        value={createFormData.totalMemory}
+                        onChange={(e) => handleInputChange('totalMemory', parseInt(e.target.value) || 5120)}
+                        min="1"
+                        className="rounded-r-none"
+                      />
+                      <div className="bg-gray-100 dark:bg-gray-800 border border-l-0 border-gray-300 dark:border-gray-600 rounded-r px-3 flex items-center text-sm">
+                        MiB
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Enter the total amount of memory available for new servers.</p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="memoryOverallocation">Memory Over-Allocation</Label>
+                    <div className="flex">
+                      <Input
+                        id="memoryOverallocation"
+                        type="number"
+                        value={createFormData.memoryOverallocation}
+                        onChange={(e) => handleInputChange('memoryOverallocation', parseInt(e.target.value) || 0)}
+                        min="0"
+                        max="100"
+                        className="rounded-r-none"
+                      />
+                      <div className="bg-gray-100 dark:bg-gray-800 border border-l-0 border-gray-300 dark:border-gray-600 rounded-r px-3 flex items-center text-sm">
+                        %
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Enter the total amount of memory you would like to allow over-allocation of memory.</p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="totalDiskSpace">Total Disk Space *</Label>
+                    <div className="flex">
+                      <Input
+                        id="totalDiskSpace"
+                        type="number"
+                        value={createFormData.totalDiskSpace}
+                        onChange={(e) => handleInputChange('totalDiskSpace', parseInt(e.target.value) || 102400)}
+                        min="1"
+                        className="rounded-r-none"
+                      />
+                      <div className="bg-gray-100 dark:bg-gray-800 border border-l-0 border-gray-300 dark:border-gray-600 rounded-r px-3 flex items-center text-sm">
+                        MiB
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Enter the total amount of disk space available for new servers.</p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="diskOverallocation">Disk Over-Allocation</Label>
+                    <div className="flex">
+                      <Input
+                        id="diskOverallocation"
+                        type="number"
+                        value={createFormData.diskOverallocation}
+                        onChange={(e) => handleInputChange('diskOverallocation', parseInt(e.target.value) || 0)}
+                        min="0"
+                        max="100"
+                        className="rounded-r-none"
+                      />
+                      <div className="bg-gray-100 dark:bg-gray-800 border border-l-0 border-gray-300 dark:border-gray-600 rounded-r px-3 flex items-center text-sm">
+                        %
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Enter the total amount of disk space you would like to allow over-allocation of disk space.</p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="daemonPort">Daemon Port *</Label>
+                    <Input
+                      id="daemonPort"
+                      type="number"
+                      value={createFormData.daemonPort}
+                      onChange={(e) => handleInputChange('daemonPort', parseInt(e.target.value) || 8080)}
+                      min="1"
+                      max="65535"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">The daemon runs its own SFTP management container and does not use the SSHd process on the main physical server.</p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="daemonSftpPort">Daemon SFTP Port *</Label>
+                    <Input
+                      id="daemonSftpPort"
+                      type="number"
+                      value={createFormData.daemonSftpPort}
+                      onChange={(e) => handleInputChange('daemonSftpPort', parseInt(e.target.value) || 2022)}
+                      min="1"
+                      max="65535"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">The daemon runs its own SFTP management container and does not use the SSHd process on the main physical server.</p>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <h4 className="font-medium mb-3">Daemon Communication Settings</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Communicates Over SSL</Label>
+                      <div className="flex items-center space-x-4 mt-2">
+                        <div className="flex items-center">
+                          <input
+                            type="radio"
+                            id="https"
+                            name="scheme"
+                            checked={createFormData.scheme === 'https'}
+                            onChange={() => handleInputChange('scheme', 'https')}
+                            className="mr-2"
+                          />
+                          <Label htmlFor="https">Use SSL Connection</Label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            type="radio"
+                            id="http"
+                            name="scheme"
+                            checked={createFormData.scheme === 'http'}
+                            onChange={() => handleInputChange('scheme', 'http')}
+                            className="mr-2"
+                          />
+                          <Label htmlFor="http">Use HTTP Connection</Label>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">In most cases you should select to use a SSL connection. If using an IP Address or you do not wish to use SSL at all, select a HTTP connection.</p>
+                    </div>
+
+                    <div>
+                      <Label>Behind Proxy</Label>
+                      <div className="flex items-center space-x-4 mt-2">
+                        <div className="flex items-center">
+                          <input
+                            type="radio"
+                            id="no-proxy"
+                            name="proxy"
+                            checked={!createFormData.behindProxy}
+                            onChange={() => handleInputChange('behindProxy', false)}
+                            className="mr-2"
+                          />
+                          <Label htmlFor="no-proxy">Not Behind Proxy</Label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            type="radio"
+                            id="behind-proxy"
+                            name="proxy"
+                            checked={createFormData.behindProxy}
+                            onChange={() => handleInputChange('behindProxy', true)}
+                            className="mr-2"
+                          />
+                          <Label htmlFor="behind-proxy">Behind Proxy</Label>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">If you are running the daemon behind a proxy such as Cloudflare, select this to have the daemon skip looking for certificates on boot.</p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="maintenance"
+                        checked={createFormData.maintenanceMode}
+                        onChange={(e) => handleInputChange('maintenanceMode', e.target.checked)}
+                      />
+                      <Label htmlFor="maintenance">Maintenance Mode</Label>
+                    </div>
+                    <p className="text-xs text-gray-500">If the node is marked as 'Under Maintenance' users won't be able to access servers on this node.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-4 border-t">
+                <Button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white">
+                  Create Node
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setCreateDialogOpen(false)}
+                  className="flex-1"
+                >
                   Cancel
                 </Button>
-                <Button type="submit">Create Node</Button>
-              </DialogFooter>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
-        </TabsList>
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Nodes</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalNodes}</p>
+              </div>
+              <Server className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {nodes.map((node) => (
-              <Card key={node.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-lg font-medium">{node.name}</CardTitle>
-                  {getStatusBadge(node.status)}
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Region:</span>
-                      <span className="font-medium">{node.region}</span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Host:</span>
-                      <span className="font-mono text-xs">{node.host}:{node.port}</span>
-                    </div>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Online Nodes</p>
+                <p className="text-2xl font-bold text-green-600">{onlineNodes}</p>
+              </div>
+              <Activity className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <MemoryStick className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm">RAM: {node.usedRam}/{node.maxRam} GB</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full" 
-                          style={{ width: `${(node.usedRam / node.maxRam) * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Servers</p>
+                <p className="text-2xl font-bold text-purple-600">{totalServers}</p>
+              </div>
+              <Users className="h-8 w-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <HardDrive className="h-4 w-4 text-green-600" />
-                        <span className="text-sm">Storage: {node.usedStorage}/{node.maxStorage} GB</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-green-600 h-2 rounded-full" 
-                          style={{ width: `${(node.usedStorage / node.maxStorage) * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Servers:</span>
-                      <span className="font-medium">{node.serverCount}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Uptime:</span>
-                      <span className="font-medium">{formatUptime(node.uptime)}</span>
-                    </div>
-
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditingNode(node);
-                          setFormData({
-                            name: node.name,
-                            host: node.host,
-                            port: node.port,
-                            region: node.region,
-                            maxRam: node.maxRam,
-                            maxStorage: node.maxStorage,
-                            description: ''
-                          });
-                        }}
-                      >
-                        <Edit className="h-3 w-3 mr-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleDeleteNode(node.id)}
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {nodes.length === 0 && (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Server className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No nodes configured</h3>
-                <p className="text-gray-600 text-center mb-4">
-                  Get started by adding your first hosting node to the platform.
-                </p>
-                <Button onClick={() => setIsCreateOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add First Node
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="performance" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Nodes</CardTitle>
-                <Server className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{nodes.length}</div>
-                <p className="text-xs text-muted-foreground">
-                  {nodes.filter(n => n.status === 'online').length} online
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total RAM</CardTitle>
-                <MemoryStick className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {nodes.reduce((acc, node) => acc + node.maxRam, 0)} GB
+      {/* Nodes List */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        {nodes.map((node) => (
+          <Card key={node.id} className="hover:shadow-lg transition-shadow">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">{node.name}</CardTitle>
+                  <CardDescription className="flex items-center gap-1 mt-1">
+                    <MapPin className="h-3 w-3" />
+                    {node.location}
+                  </CardDescription>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {nodes.reduce((acc, node) => acc + node.usedRam, 0)} GB used
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Storage</CardTitle>
-                <HardDrive className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {nodes.reduce((acc, node) => acc + node.maxStorage, 0)} GB
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {nodes.reduce((acc, node) => acc + node.usedStorage, 0)} GB used
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Active Servers</CardTitle>
-                <Activity className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {nodes.reduce((acc, node) => acc + node.serverCount, 0)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Across all nodes
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="maintenance" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Maintenance Mode</CardTitle>
-              <CardDescription>
-                Manage node maintenance and updates
-              </CardDescription>
+                {getStatusBadge(node.status)}
+              </div>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
-                Maintenance mode features will be available in the next update.
-              </p>
+            
+            <CardContent className="space-y-4">
+              {/* Server Info */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">Servers</span>
+                <span className="font-medium">
+                  {node.servers?.length || 0} / {node.maxServers}
+                </span>
+              </div>
+
+              {/* Progress bar for server usage */}
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(((node.servers?.length || 0) / node.maxServers) * 100, 100)}%`
+                  }}
+                />
+              </div>
+
+              {/* Resource Usage (if available) */}
+              {(node.cpuUsage !== undefined || node.ramUsage !== undefined) && (
+                <div className="space-y-2">
+                  {node.cpuUsage !== undefined && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">CPU</span>
+                      <span className="font-medium">{node.cpuUsage}%</span>
+                    </div>
+                  )}
+                  {node.ramUsage !== undefined && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">RAM</span>
+                      <span className="font-medium">{node.ramUsage}%</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Verification Token Indicator */}
+              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <Shield className="h-3 w-3" />
+                <span>Secured with verification token</span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openEditDialog(node)}
+                  className="flex-1"
+                >
+                  <Edit className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDeleteNode(node.id)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+
+              {/* Active Servers */}
+              {node.servers && node.servers.length > 0 && (
+                <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                    Active Servers:
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {node.servers.slice(0, 3).map((server) => (
+                      <Badge key={server.id} variant="outline" className="text-xs">
+                        {server.name}
+                      </Badge>
+                    ))}
+                    {node.servers.length > 3 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{node.servers.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {nodes.length === 0 && (
+        <Card className="text-center py-12">
+          <CardContent>
+            <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <CardTitle className="text-xl mb-2">No Nodes Found</CardTitle>
+            <CardDescription className="mb-4">
+              Get started by adding your first server node to the platform.
+            </CardDescription>
+            <Button onClick={() => setCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Your First Node
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Edit Node Dialog */}
-      <Dialog open={!!editingNode} onOpenChange={() => setEditingNode(null)}>
-        <DialogContent className="sm:max-w-[600px]">
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Node</DialogTitle>
             <DialogDescription>
-              Update node configuration
+              Update node information and settings.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleUpdateNode}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-name">Node Name</Label>
-                  <Input
-                    id="edit-name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-region">Region</Label>
-                  <Select value={formData.region} onValueChange={(value) => setFormData({ ...formData, region: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="us-east-1">US East (N. Virginia)</SelectItem>
-                      <SelectItem value="us-west-1">US West (N. California)</SelectItem>
-                      <SelectItem value="eu-west-1">Europe (Ireland)</SelectItem>
-                      <SelectItem value="ap-southeast-1">Asia Pacific (Singapore)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+          {selectedNode && (
+            <form onSubmit={handleEditNode} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-name">Node Name</Label>
+                <Input
+                  id="edit-name"
+                  value={selectedNode.name}
+                  onChange={(e) => handleEditInputChange('name', e.target.value)}
+                  required
+                />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-host">Host Address</Label>
-                  <Input
-                    id="edit-host"
-                    value={formData.host}
-                    onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-port">Port</Label>
-                  <Input
-                    id="edit-port"
-                    type="number"
-                    value={formData.port}
-                    onChange={(e) => setFormData({ ...formData, port: parseInt(e.target.value) })}
-                    required
-                  />
-                </div>
+              <div>
+                <Label htmlFor="edit-location">Location</Label>
+                <Input
+                  id="edit-location"
+                  value={selectedNode.location}
+                  onChange={(e) => handleEditInputChange('location', e.target.value)}
+                  required
+                />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-maxRam">Max RAM (GB)</Label>
-                  <Input
-                    id="edit-maxRam"
-                    type="number"
-                    value={formData.maxRam}
-                    onChange={(e) => setFormData({ ...formData, maxRam: parseInt(e.target.value) })}
-                    min="1"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-maxStorage">Max Storage (GB)</Label>
-                  <Input
-                    id="edit-maxStorage"
-                    type="number"
-                    value={formData.maxStorage}
-                    onChange={(e) => setFormData({ ...formData, maxStorage: parseInt(e.target.value) })}
-                    min="10"
-                    required
-                  />
-                </div>
+              <div>
+                <Label htmlFor="edit-maxServers">Max Servers</Label>
+                <Input
+                  id="edit-maxServers"
+                  type="number"
+                  value={selectedNode.maxServers}
+                  onChange={(e) => handleEditInputChange('maxServers', parseInt(e.target.value) || 10)}
+                  min="1"
+                  max="100"
+                />
               </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingNode(null)}>
-                Cancel
-              </Button>
-              <Button type="submit">Update Node</Button>
-            </DialogFooter>
-          </form>
+              <div>
+                <Label htmlFor="edit-status">Status</Label>
+                <Select
+                  value={selectedNode.status || 'OFFLINE'}
+                  onValueChange={(value) => handleEditInputChange('status', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ONLINE">Online</SelectItem>
+                    <SelectItem value="OFFLINE">Offline</SelectItem>
+                    <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button type="submit" className="flex-1">Update Node</Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setEditDialogOpen(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
-  );
-};
-
-export default NodesPage;
+  )
+}

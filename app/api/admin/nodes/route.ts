@@ -9,7 +9,7 @@ import crypto from 'crypto'
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -32,8 +32,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(nodes)
   } catch (error) {
     console.error('Error fetching nodes:', error)
+    console.log('Error fetching nodes:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch nodes' }, 
+      { error: 'Failed to fetch nodes' },
       { status: 500 }
     )
   }
@@ -43,18 +44,26 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
-    const { name, ip, port, location, maxServers } = body
+    const { name, ip, port, location, description, fqdn, scheme, behindProxy, maintenanceMode, publicNode, maxServers, totalMemory, memoryOverallocation, totalDiskSpace, diskOverallocation, daemonPort, daemonSftpPort } = body
 
-    // Validate required fields
-    if (!name || !ip || !port || !location) {
+    // Debug: log the received body and check for missing fields
+    const requiredFields = {
+      name, ip, port, location, description, fqdn, scheme, behindProxy, maintenanceMode, publicNode, maxServers, totalMemory, memoryOverallocation, totalDiskSpace, diskOverallocation, daemonPort, daemonSftpPort
+    }
+    const missingFields = Object.entries(requiredFields)
+      .filter(([k, v]) => v === undefined || v === null || v === '' || (typeof v === 'number' && isNaN(v)))
+      .map(([k]) => k)
+    console.log('[API] /api/admin/nodes POST body:', body)
+    if (missingFields.length > 0) {
+      console.warn('[API] /api/admin/nodes missing fields:', missingFields)
       return NextResponse.json(
-        { error: 'Name, IP, port, and location are required' }, 
+        { error: 'All required fields must be provided', missingFields, received: body },
         { status: 400 }
       )
     }
@@ -66,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     if (existingNodeByName) {
       return NextResponse.json(
-        { error: 'Node with this name already exists' }, 
+        { error: 'Node with this name already exists' },
         { status: 409 }
       )
     }
@@ -92,15 +101,21 @@ export async function POST(request: NextRequest) {
     const node = await prisma.node.create({
       data: {
         name,
-        ip: body.ip,
-        port: body.port,
-        location,
-        maxServers: maxServers || 10,
+        ip: body.ip, // or body.ip if you want to keep both
+        location: body.location,
+        scheme: body.scheme,
+        behindProxy: body.behindProxy,
+        maintenanceMode: body.maintenanceMode,
+        publicNode: body.publicNode,
+        totalMemory: body.totalMemory,
+        memoryOverallocation: body.memoryOverallocation,
+        totalDiskSpace: body.totalDiskSpace,
+        diskOverallocation: body.diskOverallocation,
+        daemonPort: body.daemonPort,
+        daemonSftpPort: body.daemonSftpPort,
         verificationToken,
         status: 'OFFLINE', // Default status
-        // Add other fields based on your schema
-        // endpoint: body.endpoint, // if you have this field
-        // port: body.port, // if you have this field
+        // Add any other fields from your schema as needed
       }
     })
 
@@ -110,8 +125,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(nodeResponse, { status: 201 })
   } catch (error) {
     console.error('Error creating node:', error)
+    console.log('Error creating node:', error)
     return NextResponse.json(
-      { error: 'Failed to create node' }, 
+      { error: 'Failed to create node' },
       { status: 500 }
     )
   }
@@ -121,17 +137,17 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const url = new URL(request.url)
     const id = url.searchParams.get('id')
-    
+
     if (!id) {
       return NextResponse.json(
-        { error: 'Node ID is required' }, 
+        { error: 'Node ID is required' },
         { status: 400 }
       )
     }
@@ -146,7 +162,7 @@ export async function PUT(request: NextRequest) {
 
     if (!existingNode) {
       return NextResponse.json(
-        { error: 'Node not found' }, 
+        { error: 'Node not found' },
         { status: 404 }
       )
     }
@@ -154,7 +170,7 @@ export async function PUT(request: NextRequest) {
     // Check if another node with same name exists (excluding current node)
     if (name && name !== existingNode.name) {
       const duplicateName = await prisma.node.findFirst({
-        where: { 
+        where: {
           name,
           id: { not: id }
         }
@@ -162,7 +178,7 @@ export async function PUT(request: NextRequest) {
 
       if (duplicateName) {
         return NextResponse.json(
-          { error: 'Node with this name already exists' }, 
+          { error: 'Node with this name already exists' },
           { status: 409 }
         )
       }
@@ -185,8 +201,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(nodeResponse)
   } catch (error) {
     console.error('Error updating node:', error)
+    console.log('Error updating node:', error)
     return NextResponse.json(
-      { error: 'Failed to update node' }, 
+      { error: 'Failed to update node' },
       { status: 500 }
     )
   }
@@ -196,17 +213,17 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const url = new URL(request.url)
     const id = url.searchParams.get('id')
-    
+
     if (!id) {
       return NextResponse.json(
-        { error: 'Node ID is required' }, 
+        { error: 'Node ID is required' },
         { status: 400 }
       )
     }
@@ -221,7 +238,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!existingNode) {
       return NextResponse.json(
-        { error: 'Node not found' }, 
+        { error: 'Node not found' },
         { status: 404 }
       )
     }
@@ -229,9 +246,9 @@ export async function DELETE(request: NextRequest) {
     // Check if node has active servers
     if (existingNode.servers.length > 0) {
       return NextResponse.json(
-        { 
-          error: 'Cannot delete node with active servers. Please migrate or delete servers first.' 
-        }, 
+        {
+          error: 'Cannot delete node with active servers. Please migrate or delete servers first.'
+        },
         { status: 409 }
       )
     }
@@ -243,8 +260,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: 'Node deleted successfully' })
   } catch (error) {
     console.error('Error deleting node:', error)
+    console.log('Error deleting node:', error)
     return NextResponse.json(
-      { error: 'Failed to delete node' }, 
+      { error: 'Failed to delete node' },
       { status: 500 }
     )
   }

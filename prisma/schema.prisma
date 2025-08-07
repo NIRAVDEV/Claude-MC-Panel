@@ -55,7 +55,19 @@ model Node {
   maxStorage      Int        @default(500000) // MB
   location        String?
   status          NodeStatus @default(OFFLINE)
-  
+  description     String?
+  scheme         String   @default("https") // "http" or "https"
+  behindProxy    Boolean  @default(false)
+  maintenanceMode       Boolean  @default(false)
+  publicNode            Boolean  @default(true)
+  totalMemory           Int      @default(5120)
+  memoryOverallocation  Int      @default(0)
+  totalDiskSpace        Int      @default(102400)
+  diskOverallocation    Int      @default(0)
+  daemonPort            Int      @default(8080)
+  daemonSftpPort        Int      @default(2022)
+
+
   // 🔒 SECURITY: Random verification token for Wings agent
   verificationToken String   @unique @default(cuid())
   
