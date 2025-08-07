@@ -1,6 +1,5 @@
-// schema.prisma
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Enhanced Prisma Schema with Node Security & Server-Node Relationships
+// This schema includes verification tokens for Wings agents and proper server-node linking
 
 generator client {
   provider = "prisma-client-js"
@@ -11,227 +10,272 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Enums
-enum UserRole {
-  USER
-  ADMIN
-}
-
-enum ServerStatus {
-  CREATING
-  CREATED
-  STOPPED
-  STARTING
-  RUNNING
-  STOPPING
-  CRASHED
-  REMOVING
-  REMOVED
-}
-
-enum TransactionType {
-  CREDIT_PURCHASE
-  ADMIN_CREDITS
-  WELCOME_BONUS
-  AD_REWARD
-  TASK_REWARD
-  SERVER_PAYMENT
-  REFUND
-  COMPLETED
-  FAILED
-}
-
-enum TaskType {
-  SURVEY
-  VIDEO_WATCH
-  APP_INSTALL
-  SOCIAL_FOLLOW
-}
-
-enum TicketStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-}
-
-// Models
+// ==================== LUCIA AUTH MODELS ====================
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String?   // For Lucia Auth
-  name          String?
-  role          UserRole  @default(USER)
-  credits       Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      UserRole @default(USER)
+  credits   Int      @default(500)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  sessions      Session[]
-  servers       Server[]
-  transactions  Transaction[]
-  tickets       Ticket[]
+  sessions     Session[]
+  servers      Server[]
+  transactions Transaction[]
+  tickets      SupportTicket[]
 
   @@map("users")
 }
 
 model Session {
-  id        String   @id @default(cuid())
+  id        String   @id
   userId    String
   expiresAt DateTime
-
-  user User @relation(references: [id], fields: [userId], onDelete: Cascade)
+  user      User     @relation(references: [id], fields: [userId], onDelete: Cascade)
 
   @@map("sessions")
 }
 
-model Node {
-  id            String   @id @default(cuid())
-  name          String   @unique
-  host          String
-  port          Int      @default(25575)
-  ipAddress     String?  // Added missing field
-  location      String?  // Added missing field
-  maxRam        Int      @default(8192)  // MB
-  maxDisk       Int      @default(100)   // GB
-  maxServers    Int      @default(10)
-  status        String?  @default("OFFLINE")
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+enum UserRole {
+  USER
+  ADMIN
+}
 
-  // Relations
-  servers Server[]
+// ==================== ENHANCED NODE MANAGEMENT ====================
+model Node {
+  id              String     @id @default(cuid())
+  name            String     @unique
+  ip              String
+  port            Int        @default(25575)
+  maxServers      Int        @default(10)
+  maxRAM          Int        @default(32768) // MB
+  maxStorage      Int        @default(500000) // MB
+  location        String?
+  status          NodeStatus @default(OFFLINE)
+  
+  // 🔒 SECURITY: Random verification token for Wings agent
+  verificationToken String   @unique @default(cuid())
+  
+  // Resource tracking
+  usedRAM         Int        @default(0)
+  usedStorage     Int        @default(0)
+  
+  // Metadata
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  lastPing        DateTime?
+
+  // Relations - servers now belong to specific nodes
+  servers         Server[]
 
   @@map("nodes")
 }
 
+enum NodeStatus {
+  ONLINE
+  OFFLINE
+  MAINTENANCE
+  ERROR
+}
+
+// ==================== ENHANCED SERVER MANAGEMENT ====================
 model Server {
-  id          String        @id @default(cuid())
+  id          String       @id @default(cuid())
   name        String
-  userId      String
-  nodeId      String
-  dockerId    String?
-  ram         Int           @default(1024) // MB
-  disk        Int           @default(5)    // GB
+  software    String       @default("VANILLA")
+  version     String       @default("latest")
+  ram         Int          @default(1024) // MB
+  storage     Int          @default(5120) // MB
   port        Int?
-  status      ServerStatus  @default(STOPPED)
-  version     String        @default("1.20.1")
-  plugins     String[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  status      ServerStatus @default(STOPPED)
+  
+  // 🔗 NODE RELATIONSHIP: Each server belongs to a specific node
+  nodeId      String
+  node        Node         @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  
+  // Container details for Wings agent
+  containerId String?      @unique // Docker container ID
+  
+  // Ownership
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  lastStart   DateTime?
 
   // Relations
-  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  node             Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  logs             ServerLog[]
-  connections      WSConnection[]
+  logs        ServerLog[]
+  backups     ServerBackup[]
 
+  @@unique([name, userId]) // Server names must be unique per user
   @@map("servers")
 }
 
+enum ServerStatus {
+  CREATING
+  CREATED
+  RUNNING
+  STOPPED
+  STARTING
+  STOPPING
+  ERROR
+  INSTALLING
+  REMOVING
+  REMOVED
+}
+
+// ==================== ENHANCED LOGGING ====================
 model ServerLog {
   id        String   @id @default(cuid())
   serverId  String
-  level     String   @default("INFO") // INFO, WARN, ERROR
-  message   String
-  timestamp DateTime @default(now())
-
-  // Relations
-  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  content   String
+  level     LogLevel @default(INFO)
+  createdAt DateTime @default(now())
 
   @@map("server_logs")
 }
 
-model WSConnection {
-  id        String   @id @default(cuid())
-  userId    String
-  serverId  String?
-  socketId  String   @unique
-  connectedAt DateTime @default(now())
-
-  // Relations
-  server Server? @relation(fields: [serverId], references: [id], onDelete: Cascade)
-
-  @@map("ws_connections")
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
 }
 
-model Transaction {
-  id          String          @id @default(cuid())
-  userId      String
-  type        TransactionType
-  amount      Int             // Credits (positive for earn, negative for spend)
-  description String
-  status      String          @default("COMPLETED")
-  createdAt   DateTime        @default(now())
+// ==================== SERVER BACKUPS ====================
+model ServerBackup {
+  id        String   @id @default(cuid())
+  serverId  String
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  filename  String
+  size      Int      // bytes
+  createdAt DateTime @default(now())
 
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("server_backups")
+}
+
+// ==================== WEBSOCKET CONNECTIONS ====================
+model WebSocketConnection {
+  id         String   @id @default(cuid())
+  userId     String?
+  serverId   String?
+  nodeId     String?  // Track which node the connection is for
+  type       String   // 'console', 'logs', 'admin'
+  createdAt  DateTime @default(now())
+  lastActive DateTime @default(now())
+
+  @@map("websocket_connections")
+}
+
+// ==================== CREDIT SYSTEM ====================
+model Transaction {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int
+  type        TransactionType
+  description String
+  status      String            @default("COMPLETED")
+  metadata    Json?             // For storing additional data
+  createdAt   DateTime          @default(now())
 
   @@map("transactions")
 }
 
+enum TransactionType {
+  CREDIT_PURCHASE
+  SERVER_COST
+  ADMIN_CREDITS
+  WELCOME_BONUS
+  AD_REWARD
+  TASK_REWARD
+  REFERRAL_BONUS
+  ADMIN_ADJUSTMENT
+  COMPLETED
+  FAILED
+}
+
+// ==================== CREDIT PACKAGES ====================
 model CreditPackage {
   id          String   @id @default(cuid())
   name        String
   credits     Int
-  price       Float    // USD
-  popular     Boolean  @default(false)
-  isActive    Boolean  @default(true)
+  price       Int      // cents
+  description String?
+  active      Boolean  @default(true)
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
   @@map("credit_packages")
 }
 
+// ==================== AD CAMPAIGNS ====================
 model AdCampaign {
   id          String   @id @default(cuid())
   name        String
-  provider    String   // "google", "admob", "unity"
-  reward      Int      // Credits per completion
-  isActive    Boolean  @default(true)
+  credits     Int
+  description String?
+  active      Boolean  @default(true)
+  maxPerUser  Int      @default(5) // Max times per user per day
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
   @@map("ad_campaigns")
 }
 
-model Task {
-  id          String   @id @default(cuid())
-  title       String
-  description String
-  type        TaskType
-  reward      Int      // Credits
-  url         String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// ==================== SUPPORT SYSTEM ====================
+model SupportTicket {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   String
+  content   String
+  status    TicketStatus @default(OPEN)
+  priority  Priority     @default(MEDIUM)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
-  @@map("tasks")
+  messages  TicketMessage[]
+
+  @@map("support_tickets")
 }
 
-model Ticket {
-  id          String       @id @default(cuid())
-  userId      String
-  subject     String
-  message     String
-  status      TicketStatus @default(OPEN)
-  priority    String       @default("MEDIUM") // LOW, MEDIUM, HIGH
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+model TicketMessage {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  content   String
+  isStaff   Boolean       @default(false)
+  createdAt DateTime      @default(now())
 
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("tickets")
+  @@map("ticket_messages")
 }
 
-model Settings {
-  id            String   @id @default(cuid())
-  key           String   @unique
-  value         String
-  description   String?
-  updatedAt     DateTime @updatedAt
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_USER
+  RESOLVED
+  CLOSED
+}
 
-  @@map("settings")
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// ==================== SYSTEM SETTINGS ====================
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  type  String @default("string") // string, number, boolean, json
+
+  @@map("system_settings")
 }

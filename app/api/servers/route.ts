@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       await tx.transaction.create({
         data: {
           userId: session.user.id,
-          type: 'SERVER_PAYMENT',
+          type: 'SERVER_COST',
           amount: cost,
           description: `Server creation: ${name}`,
           status: 'COMPLETED',

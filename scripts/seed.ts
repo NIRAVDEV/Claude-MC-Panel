@@ -18,21 +18,21 @@ async function main() {
   // Create demo users (with passwordHash if your schema requires it)
   const adminUser = await prisma.user.create({
     data: {
-      email: 'admin@minecrafthost.com',
+      email: 'admin@minecraftip.com',
       name: 'Admin User',
       role: 'ADMIN',
       credits: 10000,
-      passwordHash: await bcrypt.hash('adminpassword', 10),
+      password: await bcrypt.hash('admin123', 10),
     },
   });
 
   const regularUser = await prisma.user.create({
     data: {
-      email: 'user@minecrafthost.com',
+      email: 'user@minecraftip.com',
       name: 'Regular User',
       role: 'USER',
       credits: 500,
-      passwordHash: await bcrypt.hash('userpassword', 10),
+      password: await bcrypt.hash('user123', 10),
     },
   });
 
@@ -43,9 +43,9 @@ async function main() {
     prisma.node.create({
       data: {
         name: 'US-East-1',
-        host: '192.168.1.100',
-        maxRam: 16384,
-        maxDisk : 500,
+        ip: '192.168.1.100',
+        maxRAM: 16384,
+        maxStorage: 500,
         // usedRam: 2048,
         // usedStorage: 50,
         // status: 'ONLINE',
@@ -54,9 +54,9 @@ async function main() {
     prisma.node.create({
       data: {
         name: 'EU-West-1',
-        host: '192.168.1.101',
-        maxRam: 12288,
-        maxDisk : 300,
+        ip: '192.168.1.101',
+        maxRAM: 12288,
+        maxStorage: 300,
         // usedRam: 1024,
         // usedStorage: 30,
         // status: 'ONLINE',
@@ -65,9 +65,9 @@ async function main() {
     prisma.node.create({
       data: {
         name: 'Asia-Pacific',
-        host: '192.168.1.102',
-        maxRam: 8192,
-        maxDisk : 200,
+        ip: '192.168.1.102',
+        maxRAM: 8192,
+        maxStorage: 200,
         // usedRam: 512,
         // usedStorage: 20,
         // status: 'MAINTENANCE',
@@ -133,7 +133,7 @@ async function main() {
     prisma.transaction.create({
       data: {
         userId: regularUser.id,
-        type: 'SERVER_PAYMENT',
+        type: 'SERVER_COST',
         amount: 200,
         description: 'Server creation: My Survival Server',
         // status: 'COMPLETED',
@@ -151,10 +151,10 @@ async function main() {
     prisma.transaction.create({
       data: {
         userId: adminUser.id,
-        type: 'REFUND',
+        type: 'ADMIN_CREDITS',
         amount: 10000,
         description: 'Admin credits',
-        // status: 'COMPLETED',
+        status: 'COMPLETED',
       },
     }),
   ]);
@@ -163,8 +163,8 @@ async function main() {
 
   console.log('✅ Database seeded successfully!');
   console.log('\n🔑 Demo Accounts:');
-  console.log('Admin: admin@minecrafthost.com / adminpassword');
-  console.log('User:  user@minecrafthost.com / userpassword');
+  console.log('Admin: admin@minecraftip.com / adminpassword');
+  console.log('User:  user@minecraftip.com / userpassword');
   console.log('\n🚀 You can now start the application!');
 }
 

@@ -27,6 +27,7 @@ export const authOptions: NextAuthOptions = {
             data: {
               email: credentials.email,
               name: credentials.email.split('@')[0],
+              password: credentials.password || 'user123', // Use a default or credentials.password,
             }
           })
           return {

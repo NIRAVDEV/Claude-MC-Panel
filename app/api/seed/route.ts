@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       data: {
         email: 'admin@minecrafthost.com',
         name: 'Admin User',
+        password: bcrypt.hashSync('admin123', 10), // Hash password for demo
         role: 'ADMIN',
         credits: 10000,
       },
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
       data: {
         email: 'user@minecrafthost.com',
         name: 'Regular User',
+        password: bcrypt.hashSync('user123', 10), // Hash password for demo
         role: 'USER',
         credits: 500,
       },
@@ -43,10 +45,10 @@ export async function POST(request: NextRequest) {
       prisma.node.create({
         data: {
           name: 'US-East-1',
-          ipAddress: '192.168.1.100',
-          host: 'us-east-1.minecrafthost.com',
-          maxRam: 16384,
-          maxDisk: 500,
+          ip: '192.168.1.100',
+          // host: 'us-east-1.minecrafthost.com',
+          maxRAM: 16384,
+          maxStorage : 500,
           maxServers: 20,
           status: 'ONLINE',
           // usedMemory: 2048,
@@ -56,10 +58,10 @@ export async function POST(request: NextRequest) {
       prisma.node.create({
         data: {
           name: 'EU-West-1',
-          ipAddress: '192.168.1.101',
-          host: 'eu-west-1.minecrafthost.com',
-          maxRam: 12288,
-          maxDisk: 300,
+          ip: '192.168.1.101',
+          // host: 'eu-west-1.minecrafthost.com',
+          maxRAM: 12288,
+          maxStorage : 300,
           maxServers: 15,
           status: 'ONLINE',
           // usedMemory: 1024,
@@ -69,10 +71,10 @@ export async function POST(request: NextRequest) {
       prisma.node.create({
         data: {
           name: 'Asia-Pacific',
-          ipAddress: '192.168.1.102',
-          host: 'asia-pacific.minecrafthost.com',
-          maxRam: 8192,
-          maxDisk: 200,
+          ip: '192.168.1.102',
+          // host: 'asia-pacific.minecrafthost.com',
+          maxRAM: 8192,
+          maxStorage : 200,
           maxServers: 10,
           status: 'ONLINE'
         }
@@ -92,7 +94,7 @@ export async function POST(request: NextRequest) {
           nodeId: nodes[0].id,
           // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
           version: '1.20.1',
-          plugins: ['EssentialsX', 'WorldEdit', 'LuckPerms'],
+          // plugins: ['EssentialsX', 'WorldEdit', 'LuckPerms'],
         },
       }),
       prisma.server.create({
@@ -104,7 +106,7 @@ export async function POST(request: NextRequest) {
           nodeId: nodes[1].id,
           // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
           version: '1.20.1',
-          plugins: ['WorldEdit', 'FastAsyncWorldEdit', 'VoxelSniper'],
+          // plugins: ['WorldEdit', 'FastAsyncWorldEdit', 'VoxelSniper'],
         },
       }),
       prisma.server.create({
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
           nodeId: nodes[0].id,
           // dockerContainerId: 'container-' + Math.random().toString(36).substr(2, 9),
           version: '1.19.4',
-          plugins: ['Essentials'],
+          // plugins: ['Essentials'],
         },
       }),
     ]);
@@ -137,7 +139,7 @@ export async function POST(request: NextRequest) {
       prisma.transaction.create({
         data: {
           userId: regularUser.id,
-          type: 'SERVER_PAYMENT',
+          type: 'SERVER_COST',
           amount: 200,
           description: 'Server creation: My Survival Server',
           status: 'COMPLETED',
