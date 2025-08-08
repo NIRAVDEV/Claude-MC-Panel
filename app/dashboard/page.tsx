@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
+// import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -20,56 +20,80 @@ interface Server {
 }
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession()
+  // const { data: session, status } = useSession()
   const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [servers, setServers] = useState<Server[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin')
+  // Lucia session fetcher
+  async function fetchLuciaSession() {
+    try {
+      const res = await fetch('/api/auth/session', {
+        credentials: 'include'
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return data.user || null
+    } catch {
+      return null
     }
-  }, [status, router])
-
-  // useEffect(() => {
-  //   const fetchServers = async () => {
-  //     try {
-  //       const response = await fetch('/api/servers')
-  //       if (response.ok) {
-  //         const data = await response.json()
-  //         setServers(data)
-  //       }
-  //     } catch (error) {
-  //       console.error('Failed to fetch servers:', error)
-  //     } finally {
-  //       setIsLoading(false)
-  //     }
-  //   }
-  useEffect(() => {
-    const fetchServers = async () => {
-  try {
-    const response = await fetch('/api/servers')
-    if (response.ok) {
-      const data = await response.json()
-      setServers(Array.isArray(data) ? data : [])
-    }
-  } catch (error) {
-    console.error('Failed to fetch servers:', error)
-  } finally {
-    setIsLoading(false)
   }
-}
 
-    if (session?.user?.email) {
+  // Lucia session fetch
+  useEffect(() => {
+    async function loadSession() {
+      setAuthLoading(true)
+      const luciaUser = await fetchLuciaSession()
+      setUser(luciaUser)
+      setAuthLoading(false)
+      
+      if (!luciaUser) {
+        router.push('/auth/lucia/signin')
+      }
+    }
+    loadSession()
+  }, [router])
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/auth/lucia/signin')
+    }
+  }, [authLoading, user, router])
+
+  // Fetch servers function
+  const fetchServers = async () => {
+    try {
+      const response = await fetch('/api/servers', {
+        credentials: 'include'
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setServers(Array.isArray(data.servers) ? data.servers : [])
+      } else {
+        setServers([])
+      }
+    } catch (error) {
+      console.error('Failed to fetch servers:', error)
+      setServers([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Fetch servers when user is authenticated
+  useEffect(() => {
+    if (!authLoading && user) {
       fetchServers()
     }
-  }, [session])
+  }, [authLoading, user])
 
-  if (status === 'loading' || isLoading) {
+  if (authLoading || isLoading) {
     return <div className="container mx-auto px-4 py-8">Loading...</div>
   }
 
-  if (!session) {
+  if (!user) {
     return null
   }
 
@@ -94,7 +118,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
             <p className="text-muted-foreground">
-              Welcome back, {session.user.name}
+              Welcome back, {user.name}
             </p>
           </div>
           <Button asChild>
@@ -114,7 +138,7 @@ export default function DashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold flex items-center">
                 <Coins className="h-5 w-5 text-yellow-500 mr-2" />
-                {session.user.credits || 0}
+                {user.credits || 0}
               </div>
               <Button variant="outline" size="sm" className="mt-2" asChild>
                 <Link href="/earn">Earn More</Link>
@@ -152,8 +176,8 @@ export default function DashboardPage() {
               <CardTitle className="text-sm font-medium">Account Type</CardTitle>
             </CardHeader>
             <CardContent>
-              <Badge variant={session.user.role === 'ADMIN' ? 'default' : 'secondary'}>
-                {session.user.role || 'USER'}
+              <Badge variant={user.role === 'ADMIN' ? 'default' : 'secondary'}>
+                {user.role || 'USER'}
               </Badge>
             </CardContent>
           </Card>

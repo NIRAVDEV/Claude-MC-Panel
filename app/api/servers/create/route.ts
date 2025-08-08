@@ -1,7 +1,8 @@
 // app/api/servers/create/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { lucia } from '@/lib/lucia'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
 // import { authOptions } from '@/lib/auth'
 import { cookies } from 'next/headers'
 
@@ -13,6 +14,7 @@ interface WingsCreateServerRequest {
   maxRAM?: number
   storage?: string
   type?: string
+  nodeId?: string
 }
 
 interface WingsCreateServerResponse {
@@ -69,7 +71,7 @@ function calculateCreditCost(ram: string, storage: string): number {
 
 // Validate Server Software
 function validateServerSoftware(software: string): boolean {
-  const supportedSoftware = ['vanilla', 'paper', 'purpur', 'fabric', 'forge', 'spigot']
+  const supportedSoftware = ['vanilla', 'paper', 'purpur', 'fabric', 'forge', 'spigot', 'leaf']
   return supportedSoftware.includes(software.toLowerCase())
 }
 
@@ -77,14 +79,17 @@ export async function POST(request: NextRequest) {
   try {
     // Parse request body
     const body: CreateServerRequest = await request.json()
+    console.log('[API/servers/create] Incoming request body:', body)
     const { name, software, maxRAM, storage, nodeId } = body
 
     // Validate required fields
     if (!name || !software || !maxRAM || !storage || !nodeId) {
+      console.warn('[API/servers/create] Missing required fields:', { name, software, maxRAM, storage, nodeId })
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Missing required fields: name, software, maxRAM, storage, nodeId' 
+          error: 'Missing required fields: name, software, maxRAM, storage, nodeId',
+          received: body
         },
         { status: 400 }
       )
@@ -92,52 +97,48 @@ export async function POST(request: NextRequest) {
 
     // Validate server software
     if (!validateServerSoftware(software)) {
+      console.warn('[API/servers/create] Unsupported server software:', software)
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Unsupported server software. Supported: vanilla, paper, purpur, fabric, forge, spigot' 
+          error: 'Unsupported server software. Supported: vanilla, paper, purpur, fabric, forge, spigot',
+          received: software
         },
         { status: 400 }
       )
     }
 
-    // Get current user from session
-    const cookieStore = cookies()
-    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
-    
-    if (!sessionId) {
+    // Get current user from NextAuth session
+    const session = await getServerSession(authOptions)
+    if (!session || !session.user?.email) {
+      console.warn('[API/servers/create] No NextAuth session found')
       return NextResponse.json(
         { success: false, error: 'Not authenticated' },
         { status: 401 }
       )
     }
 
-    const { user } = await lucia.validateSession(sessionId)
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid session' },
-        { status: 401 }
-      )
-    }
-
     // Get user with current credits
     const userData = await prisma.user.findUnique({
-      where: { id: user.id },
+      where: { email: session.user.email },
       select: { id: true, email: true, credits: true, name: true }
     })
 
     if (!userData) {
+      console.warn('[API/servers/create] User not found:', session.user.email)
       return NextResponse.json(
         { success: false, error: 'User not found' },
         { status: 404 }
       )
     }
+    const user = userData;
 
     // Calculate credit cost
     const creditCost = calculateCreditCost(maxRAM, storage)
 
     // Check if user has enough credits
     if (userData.credits < creditCost) {
+      console.warn('[API/servers/create] Insufficient credits:', { required: creditCost, available: userData.credits })
       return NextResponse.json(
         { 
           success: false, 
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!node) {
+      console.warn('[API/servers/create] Node not found:', nodeId)
       return NextResponse.json(
         { success: false, error: 'Node not found' },
         { status: 404 }
@@ -170,6 +172,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (node.status !== 'ONLINE') {
+      console.warn('[API/servers/create] Node not online:', node)
       return NextResponse.json(
         { success: false, error: 'Selected node is not online' },
         { status: 503 }
@@ -185,6 +188,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingServer) {
+      console.warn('[API/servers/create] Server with this name already exists:', name)
       return NextResponse.json(
         { success: false, error: 'Server with this name already exists' },
         { status: 409 }
@@ -199,7 +203,8 @@ export async function POST(request: NextRequest) {
       software: software.toLowerCase(),
       maxRAM: parseInt(maxRAM, 10),
       storage,
-      type: software.toLowerCase()
+      type: software.toLowerCase(),
+      nodeId
     }
 
     // Create server on Wings agent
@@ -207,7 +212,7 @@ export async function POST(request: NextRequest) {
     try {
       wingsResponse = await createServerOnNode(nodeUrl, node.verificationToken, wingsRequest)
     } catch (error) {
-      console.error('Wings server creation failed:', error)
+      console.error('[API/servers/create] Wings server creation failed:', error)
       return NextResponse.json(
         { 
           success: false, 
@@ -220,6 +225,7 @@ export async function POST(request: NextRequest) {
 
     // Verify Wings response
     if (wingsResponse.status !== 'ok' || !wingsResponse.serverId) {
+      console.warn('[API/servers/create] Wings agent failed to create server:', wingsResponse)
       return NextResponse.json(
         { 
           success: false, 
@@ -300,13 +306,13 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Server creation API error:', error)
-    
+    console.error('[API/servers/create] Unhandled error:', error)
     return NextResponse.json(
       { 
         success: false, 
         error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       },
       { status: 500 }
     )
@@ -316,28 +322,33 @@ export async function POST(request: NextRequest) {
 // GET endpoint to retrieve user's servers
 export async function GET(request: NextRequest) {
   try {
-    // Get current user from session
-    const cookieStore = cookies()
-    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
-    
-    if (!sessionId) {
+    // Get current user from NextAuth session
+    const session = await getServerSession(authOptions)
+    if (!session || !session.user?.email) {
+      console.warn('[API/servers/create][GET] No NextAuth session found')
       return NextResponse.json(
         { success: false, error: 'Not authenticated' },
         { status: 401 }
       )
     }
 
-    const { user } = await lucia.validateSession(sessionId)
-    if (!user) {
+    // Get user data
+    const userData = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true }
+    })
+
+    if (!userData) {
+      console.warn('[API/servers/create][GET] User not found:', session.user.email)
       return NextResponse.json(
-        { success: false, error: 'Invalid session' },
-        { status: 401 }
+        { success: false, error: 'User not found' },
+        { status: 404 }
       )
     }
 
     // Get user's servers
     const servers = await prisma.server.findMany({
-      where: { userId: user.id },
+      where: { userId: userData.id },
       include: {
         node: {
           select: { 

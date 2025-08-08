@@ -120,7 +120,7 @@ async function main() {
   console.log('🎮 Created demo servers');
 
   // Create demo transactions
-  const transactions = await Promise.all([
+  const transaction = await Promise.all([
     prisma.transaction.create({
       data: {
         userId: regularUser.id,

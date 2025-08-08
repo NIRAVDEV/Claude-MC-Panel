@@ -1,24 +1,55 @@
 'use client';
 
-import { useEffect } from 'react';
-import { signOut } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+// import { signOut } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { LogOut, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { toast } from '@/components/ui/use-toast';
 
 const SignOutPage = () => {
+  const router = useRouter();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleLuciaSignOut = async () => {
+    try {
+      const response = await fetch('/api/auth/lucia/signout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Signed out successfully",
+        });
+        router.push('/');
+      } else {
+        console.error('Sign out failed:', data.error);
+        router.push('/'); // Redirect anyway
+      }
+    } catch (error) {
+      console.error('Sign out error:', error);
+      router.push('/'); // Redirect anyway
+    }
+  };
+
   useEffect(() => {
     // Auto sign out after 3 seconds
     const timer = setTimeout(() => {
-      signOut({ callbackUrl: '/' });
+      handleLuciaSignOut();
     }, 3000);
 
     return () => clearTimeout(timer);
   }, []);
 
   const handleSignOut = () => {
-    signOut({ callbackUrl: '/' });
+    setIsSigningOut(true);
+    handleLuciaSignOut();
   };
 
   return (
@@ -42,9 +73,9 @@ const SignOutPage = () => {
           </div>
 
           <div className="flex flex-col space-y-2">
-            <Button onClick={handleSignOut} className="w-full">
+            <Button onClick={handleSignOut} className="w-full" disabled={isSigningOut}>
               <LogOut className="h-4 w-4 mr-2" />
-              Sign Out Now
+              {isSigningOut ? 'Signing Out...' : 'Sign Out Now'}
             </Button>
             <Link href="/dashboard">
               <Button variant="outline" className="w-full">

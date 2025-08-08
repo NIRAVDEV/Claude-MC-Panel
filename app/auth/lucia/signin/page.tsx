@@ -1,8 +1,7 @@
-// app/auth/signin/page.tsx
+// app/auth/lucia/signin/page.tsx
 'use client'
 
 import { useState } from 'react'
-// import { signIn, getSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +11,7 @@ import { Server, Mail, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
-export default function SignInPage() {
+export default function LuciaSignInPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -76,7 +75,7 @@ export default function SignInPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Sign In</CardTitle>
+            <CardTitle>Sign In with Lucia</CardTitle>
             <CardDescription>
               Enter your email to access your account
             </CardDescription>
@@ -143,6 +142,12 @@ export default function SignInPage() {
                   Use any password to sign in
                 </p>
               </div>
+            </div>
+
+            <div className="mt-4 text-center">
+              <Link href="/auth/signin" className="text-sm text-muted-foreground hover:text-primary">
+                ← Back to NextAuth signin
+              </Link>
             </div>
           </CardContent>
         </Card>

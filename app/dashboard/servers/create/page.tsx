@@ -20,8 +20,9 @@ export default function CreateServerPage() {
   const [formData, setFormData] = useState({
     name: '',
     software: 'vanilla',
-    ram: '2GB',
-    storage: '10GB'
+    maxRAM: '2GB',
+    storage: '10GB',
+    nodeId: 'cme2hzp880000626wm99cqqv2' // TODO: Replace with real node selection
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,7 +30,7 @@ export default function CreateServerPage() {
     if (!session?.user?.email) return
 
     // Debug: check required fields and log payload
-    const requiredFields = ['name', 'software', 'ram', 'storage']
+    const requiredFields = ['name', 'software', 'maxRAM', 'storage', 'nodeId']
     let missingFields: string[] = []
     for (const field of requiredFields) {
       const value = (formData as any)[field]
@@ -37,7 +38,13 @@ export default function CreateServerPage() {
         missingFields.push(field)
       }
     }
-    const debugPayload = { ...formData, userEmail: session.user.email }
+    // Send maxRAM and storage as strings with 'GB' suffix (e.g., '2GB')
+    const debugPayload = {
+      ...formData,
+      maxRAM: formData.maxRAM,
+      storage: formData.storage,
+      userEmail: session.user.email
+    }
     console.log('[Server Create] Payload:', debugPayload)
     if (missingFields.length > 0) {
       console.warn('[Server Create] Missing/Invalid fields:', missingFields)
@@ -55,16 +62,32 @@ export default function CreateServerPage() {
 
     setIsLoading(true)
     try {
-      const response = await fetch('/api/servers', {
+      console.log('[Server Create] Sending request to /api/servers/create...')
+      const response = await fetch('/api/servers/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(debugPayload)
       })
+      console.log('[Server Create] Response status:', response.status)
+      let responseBody
+      let rawText = ''
+      try {
+        responseBody = await response.clone().json()
+        console.log('[Server Create] Response body (JSON):', responseBody)
+      } catch (jsonErr) {
+        try {
+          rawText = await response.clone().text()
+          console.warn('[Server Create] Response body (raw text):', rawText)
+        } catch (textErr) {
+          console.warn('[Server Create] Could not parse response as JSON or text:', jsonErr, textErr)
+        }
+        responseBody = null
+      }
 
       if (response.ok) {
         router.push('/dashboard')
       } else {
-        console.error('Failed to create server')
+        console.error('Failed to create server', response.status, responseBody || rawText)
       }
     } catch (error) {
       console.error('Error creating server:', error)
@@ -74,9 +97,9 @@ export default function CreateServerPage() {
   }
 
   const getCreditCost = () => {
-    const ramCost = parseInt(formData.ram) * 25
-    const storageCost = parseInt(formData.storage) * 2
-    return ramCost + storageCost
+  const ramCost = parseInt(formData.maxRAM) * 25
+  const storageCost = parseInt(formData.storage) * 2
+  return ramCost + storageCost
   }
 
   return (
@@ -132,8 +155,8 @@ export default function CreateServerPage() {
               </div>
 
               <div>
-                <Label htmlFor="ram">RAM</Label>
-                <Select value={formData.ram} onValueChange={(value) => setFormData({ ...formData, ram: value })}>
+                <Label htmlFor="maxRAM">RAM</Label>
+                <Select value={formData.maxRAM} onValueChange={(value) => setFormData({ ...formData, maxRAM: value })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -165,8 +188,8 @@ export default function CreateServerPage() {
                 <h4 className="font-semibold mb-2">Monthly Cost Breakdown</h4>
                 <div className="space-y-1">
                   <div className="flex justify-between">
-                    <span>RAM ({formData.ram})</span>
-                    <span>{parseInt(formData.ram) * 25} credits</span>
+                    <span>RAM ({formData.maxRAM})</span>
+                    <span>{parseInt(formData.maxRAM) * 25} credits</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Storage ({formData.storage})</span>

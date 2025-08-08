@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+// import { getServerSession } from 'next-auth';
+// import { authOptions } from '@/lib/auth';
+import { lucia } from '@/lib/lucia';
+import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    // Lucia authentication
+    const cookieStore = cookies()
+    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
     
-    if (!session?.user?.id) {
+    if (!sessionId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { user } = await lucia.validateSession(sessionId)
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
     }
 
     const servers = await prisma.server.findMany({
       where: {
-        userId: session.user.id,
+        userId: user.id,
       },
       include: {
         node: {
@@ -40,10 +50,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    // Lucia authentication
+    const cookieStore = cookies()
+    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
     
-    if (!session?.user?.id) {
+    if (!sessionId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { user: sessionUser } = await lucia.validateSession(sessionId)
+    
+    if (!sessionUser) {
+      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -58,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user has enough credits
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: sessionUser.id },
       select: { credits: true },
     });
 
@@ -90,7 +108,7 @@ export async function POST(request: NextRequest) {
           name,
           // plan,
           nodeId,
-          userId: session.user.id,
+          userId: sessionUser.id,
           status: 'CREATING',
           port: Math.floor(Math.random() * (65535 - 25565) + 25565), // Random port
         },
@@ -106,7 +124,7 @@ export async function POST(request: NextRequest) {
 
       // Deduct credits
       await tx.user.update({
-        where: { id: session.user.id },
+        where: { id: sessionUser.id },
         data: {
           credits: {
             decrement: cost,
@@ -117,7 +135,7 @@ export async function POST(request: NextRequest) {
       // Create transaction record
       await tx.transaction.create({
         data: {
-          userId: session.user.id,
+          userId: sessionUser.id,
           type: 'SERVER_COST',
           amount: cost,
           description: `Server creation: ${name}`,
