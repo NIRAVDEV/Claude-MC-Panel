@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-// import { authOptions } from '@/lib/auth'
+import { validateRequest } from '@/lib/auth-utils'
 import { cookies } from 'next/headers'
 
 // Types for Wings API communication
@@ -30,6 +30,7 @@ interface CreateServerRequest {
   maxRAM: string
   storage: string
   nodeId: string
+  userEmail?: string // client should not rely on this; server determines from auth
 }
 
 interface ServerCreationError extends Error {
@@ -108,30 +109,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get current user from NextAuth session
-    const session = await getServerSession(authOptions)
-    if (!session || !session.user?.email) {
-      console.warn('[API/servers/create] No NextAuth session found')
-      return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
-      )
+    // Determine authenticated user via Lucia first, fallback to next-auth
+    const luciaResult = await validateRequest()
+    const nextAuthSession = await getServerSession(authOptions)
+    const luciaUser = luciaResult.user
+    const nextAuthEmail = nextAuthSession?.user?.email
+
+    console.log('[API/servers/create] Auth state:', {
+      luciaUser: luciaUser ? { id: luciaUser.id, email: luciaUser.email, role: (luciaUser as any).role } : null,
+      nextAuthEmail,
+      bodyUserEmail: body.userEmail
+    })
+
+    const effectiveEmail = luciaUser?.email || nextAuthEmail
+    if (!effectiveEmail) {
+      console.warn('[API/servers/create] No authenticated email from lucia or next-auth')
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
     // Get user with current credits
     const userData = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true, email: true, credits: true, name: true }
+      where: { email: effectiveEmail },
+      select: { id: true, email: true, credits: true, name: true, role: true }
     })
 
     if (!userData) {
-      console.warn('[API/servers/create] User not found:', session.user.email)
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
+      console.warn('[API/servers/create] User not found in DB for email:', effectiveEmail)
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
-    const user = userData;
+    const user = userData
 
     // Calculate credit cost
     const creditCost = calculateCreditCost(maxRAM, storage)
@@ -150,25 +156,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get target node information
+    // Validate nodeId existence
     const node = await prisma.node.findUnique({
-      where: { id: nodeId },
-      select: { 
-        id: true, 
-        name: true, 
-        ip: true, 
-        port: true, 
-        verificationToken: true,
-        status: true 
-      }
+      where: { id: body.nodeId },
     })
 
     if (!node) {
-      console.warn('[API/servers/create] Node not found:', nodeId)
-      return NextResponse.json(
-        { success: false, error: 'Node not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({
+        error: 'Node not found',
+      }, { status: 404 })
     }
 
     if (node.status !== 'ONLINE') {
@@ -199,12 +195,12 @@ export async function POST(request: NextRequest) {
     const nodeUrl = `http://${node.ip}:${node.port}`
     const wingsRequest: WingsCreateServerRequest = {
       serverName: name,
-      userEmail: userData.email,
+      userEmail: userData.email, // authoritative email
       software: software.toLowerCase(),
       maxRAM: parseInt(maxRAM, 10),
       storage,
       type: software.toLowerCase(),
-      nodeId
+      nodeId // placeholder, will be set later
     }
 
     // Create server on Wings agent

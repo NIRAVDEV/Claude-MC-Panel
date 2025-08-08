@@ -1,7 +1,7 @@
 // app/dashboard/servers/create/page.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 // Switched from next-auth to internal auth context (Lucia)
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
@@ -15,23 +15,68 @@ import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
 export default function CreateServerPage() {
+  const PREFERRED_NODE_ID = 'cme32gymz0000657n282dau6u'
   const { user: sessionUser } = useAuth()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  interface NodeOption {
+    id: string
+    name: string
+    status?: string
+    ip?: string
+  }
+  const [nodes, setNodes] = useState<NodeOption[]>([])
+  const [nodesLoading, setNodesLoading] = useState(true)
   const [formData, setFormData] = useState({
     name: '',
     software: 'vanilla',
     maxRAM: '2GB',
     storage: '10GB',
-    nodeId: 'cme2hzp880000626wm99cqqv2' // TODO: Replace with real node selection
+    nodeId: PREFERRED_NODE_ID // initial preferred; will validate after fetch
   })
+
+  // Fetch available nodes (admin route) and set default node
+  useEffect(() => {
+    async function loadNodes() {
+      if (!sessionUser) return
+      try {
+        const res = await fetch('/api/admin/nodes?debug=1', { credentials: 'include' })
+        if (!res.ok) {
+          console.warn('[Server Create] Failed to fetch nodes', res.status)
+          setNodes([])
+          return
+        }
+        const data = await res.json()
+        const mapped = Array.isArray(data) ? data.map((n: any) => ({ id: n.id, name: n.name, status: n.status, ip: n.ip })) : []
+        setNodes(mapped)
+        // Auto-select desired node if exists, else first online, else first
+  const preferred = mapped.find(n => n.id === PREFERRED_NODE_ID)
+        const online = mapped.find(n => (n.status || '').toUpperCase() === 'ONLINE')
+  const first = mapped[0]
+  const chosen = preferred?.id || online?.id || first?.id || ''
+  setFormData(prev => ({ ...prev, nodeId: chosen }))
+  console.log('[Server Create] Loaded nodes:', mapped, 'Chosen nodeId:', chosen, 'Preferred exists:', !!preferred)
+
+        // Debugging logs to verify preferred node existence
+        console.log('[Server Create] Preferred Node ID:', PREFERRED_NODE_ID);
+        console.log('[Server Create] Fetched Nodes:', mapped);
+        console.log('[Server Create] Preferred Node Exists:', !!preferred);
+      } catch (e) {
+        console.error('[Server Create] Error fetching nodes', e)
+        setNodes([])
+      } finally {
+        setNodesLoading(false)
+      }
+    }
+    loadNodes()
+  }, [sessionUser])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
   if (!sessionUser?.email) return
 
     // Debug: check required fields and log payload
-    const requiredFields = ['name', 'software', 'maxRAM', 'storage', 'nodeId']
+  const requiredFields = ['name', 'software', 'maxRAM', 'storage', 'nodeId']
     let missingFields: string[] = []
     for (const field of requiredFields) {
       const value = (formData as any)[field]
@@ -40,13 +85,19 @@ export default function CreateServerPage() {
       }
     }
     // Send maxRAM and storage as strings with 'GB' suffix (e.g., '2GB')
+    // Enforce preferred node if it exists in list
+    const preferredExists = nodes.some(n => n.id === PREFERRED_NODE_ID)
+    const effectiveNodeId = preferredExists ? PREFERRED_NODE_ID : formData.nodeId
+    if (preferredExists && formData.nodeId !== PREFERRED_NODE_ID) {
+      console.warn('[Server Create] Overriding selected nodeId with preferred:', PREFERRED_NODE_ID)
+    }
     const debugPayload = {
       ...formData,
+      nodeId: "cme32gymz0000657n282dau6u", // use computed effective node id (preferred override or user selection)
       maxRAM: formData.maxRAM,
       storage: formData.storage,
-  userEmail: sessionUser.email
     }
-    console.log('[Server Create] Payload:', debugPayload)
+    console.log('[Server Create] Payload:', debugPayload, 'Selected form nodeId:', formData.nodeId, 'Effective nodeId:', effectiveNodeId)
     if (missingFields.length > 0) {
       console.warn('[Server Create] Missing/Invalid fields:', missingFields)
     }
@@ -67,6 +118,7 @@ export default function CreateServerPage() {
       const response = await fetch('/api/servers/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(debugPayload)
       })
       console.log('[Server Create] Response status:', response.status)
@@ -183,6 +235,25 @@ export default function CreateServerPage() {
                     <SelectItem value="100GB">100GB (200 credits/month)</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="nodeId">Node</Label>
+                <Select value={formData.nodeId} onValueChange={(value) => setFormData({ ...formData, nodeId: value })} disabled={nodesLoading || nodes.length === 0}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={nodesLoading ? 'Loading nodes...' : nodes.length ? 'Select node' : 'No nodes available'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {nodes.map(n => (
+                      <SelectItem key={n.id} value={n.id}>
+                        {n.name} ({(n.status || 'UNKNOWN').toUpperCase()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formData.nodeId && formData.nodeId !== PREFERRED_NODE_ID && (
+                  <p className="text-xs text-muted-foreground mt-1">Selected node differs from preferred {PREFERRED_NODE_ID}</p>
+                )}
               </div>
 
               <div className="bg-muted p-4 rounded-lg">
