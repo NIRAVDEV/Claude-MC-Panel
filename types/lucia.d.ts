@@ -41,8 +41,10 @@ export interface AuthUser {
   name: string | null
   role: "USER" | "ADMIN"
   credits: number
-  createdAt: Date
-  updatedAt: Date
+  // These may not be included in the Lucia user object (not returned by getUserAttributes)
+  // so mark them optional to avoid type mismatch with `lucia`'s `User` type.
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 // Session context type

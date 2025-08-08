@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Coins, CreditCard, History, Zap } from 'lucide-react'
 
 export default function BillingPage() {
-  const { data: session } = useSession()
+  const { user: session } = useAuth()
   const [selectedPackage, setSelectedPackage] = useState('')
 
   const creditPackages = [
@@ -29,14 +29,14 @@ export default function BillingPage() {
         </p>
       </div>
 
-      {session && (
+  {session && (
         <div className="mb-6">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Coins className="h-6 w-6 text-yellow-500" />
-                  <span className="text-2xl font-bold">{session.user.credits || 0}</span>
+                  <span className="text-2xl font-bold">{session.credits || 0}</span>
                   <span className="text-muted-foreground">Credits Available</span>
                 </div>
                 <Button variant="outline" asChild>

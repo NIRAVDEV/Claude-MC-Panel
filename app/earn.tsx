@@ -2,18 +2,18 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Coins, ExternalLink, Play, Gift } from 'lucide-react'
 
 export default function EarnPage() {
-  const { data: session, update } = useSession()
+  const { user: session, refreshUser } = useAuth()
   const [isLoading, setIsLoading] = useState('')
 
   const earnCredits = async (type: string) => {
-    if (!session?.user?.email) return
+  if (!session?.email) return
 
     setIsLoading(type)
     try {
@@ -25,9 +25,8 @@ export default function EarnPage() {
 
       if (response.ok) {
         const data = await response.json()
-        // Update session to reflect new credit balance
-        await update()
-        alert(`You earned ${data.earned} credits! Total: ${data.credits}`)
+  await refreshUser()
+  alert(`You earned ${data.earned} credits! Total: ${data.credits}`)
       }
     } catch (error) {
       console.error('Failed to earn credits:', error)
@@ -45,13 +44,13 @@ export default function EarnPage() {
         </p>
       </div>
 
-      {session && (
+  {session && (
         <div className="mb-6">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-center space-x-2">
                 <Coins className="h-6 w-6 text-yellow-500" />
-                <span className="text-2xl font-bold">{session.user.credits || 0}</span>
+                <span className="text-2xl font-bold">{session.credits || 0}</span>
                 <span className="text-muted-foreground">Credits Available</span>
               </div>
             </CardContent>
@@ -166,7 +165,7 @@ export default function EarnPage() {
             <div className="flex justify-between items-center">
               <span>Your referral code:</span>
               <code className="text-sm bg-muted px-2 py-1 rounded">
-                {session?.user?.id?.slice(-8).toUpperCase() || 'LOGIN_REQUIRED'}
+                {session?.id?.slice(-8).toUpperCase() || 'LOGIN_REQUIRED'}
               </code>
             </div>
             <Button className="w-full" variant="outline" disabled>

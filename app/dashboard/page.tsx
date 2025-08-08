@@ -2,6 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/lib/auth-context'
 // import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -9,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Server, Play, Square, RotateCcw, Settings, Coins } from 'lucide-react'
+import { requireAuth } from '@/lib/auth-utils';
+import SignOutButton from '@/components/auth/SignOutButton'
 
 interface Server {
   id: string
@@ -22,45 +25,23 @@ interface Server {
 export default function DashboardPage() {
   // const { data: session, status } = useSession()
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [authLoading, setAuthLoading] = useState(true)
+  const { user, loading: authLoading, refreshUser } = useAuth()
   const [servers, setServers] = useState<Server[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Lucia session fetcher
-  async function fetchLuciaSession() {
-    try {
-      const res = await fetch('/api/auth/session', {
-        credentials: 'include'
-      })
-      if (!res.ok) return null
-      const data = await res.json()
-      return data.user || null
-    } catch {
-      return null
-    }
-  }
-
-  // Lucia session fetch
-  useEffect(() => {
-    async function loadSession() {
-      setAuthLoading(true)
-      const luciaUser = await fetchLuciaSession()
-      setUser(luciaUser)
-      setAuthLoading(false)
-      
-      if (!luciaUser) {
-        router.push('/auth/lucia/signin')
-      }
-    }
-    loadSession()
-  }, [router])
-
+  // Redirect if unauthenticated when loading completes
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push('/auth/lucia/signin')
+      router.push('/auth/signin')
     }
   }, [authLoading, user, router])
+
+  // Refresh user once on mount if needed
+  useEffect(() => {
+    if (!user && !authLoading) {
+      refreshUser()
+    }
+  }, [])
 
   // Fetch servers function
   const fetchServers = async () => {

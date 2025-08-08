@@ -1,7 +1,8 @@
 // app/admin/page.tsx
 'use client'
 
-import { useSession } from 'next-auth/react'
+// Using lucia auth context instead of next-auth
+import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,17 +33,17 @@ interface Node {
 }
 
 export default function AdminPage() {
-  const { data: session, status } = useSession()
+  const { user: session, loading: statusLoading } = useAuth()
   const router = useRouter()
   const [users, setUsers] = useState<User[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    if (status === 'unauthenticated' || (session?.user?.role !== 'ADMIN')) {
+    if (!statusLoading && (!session || session.role !== 'ADMIN')) {
       router.push('/dashboard')
     }
-  }, [status, session, router])
+  }, [statusLoading, session, router])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -68,16 +69,16 @@ export default function AdminPage() {
       }
     }
 
-    if (session?.user?.role === 'ADMIN') {
+    if (session?.role === 'ADMIN') {
       fetchData()
     }
   }, [session])
 
-  if (status === 'loading' || isLoading) {
+  if (statusLoading || isLoading) {
     return <div className="container mx-auto px-4 py-8">Loading...</div>
   }
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.role !== 'ADMIN') {
     return null
   }
 

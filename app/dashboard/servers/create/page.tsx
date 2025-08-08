@@ -2,7 +2,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+// Switched from next-auth to internal auth context (Lucia)
+import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +15,7 @@ import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
 export default function CreateServerPage() {
-  const { data: session } = useSession()
+  const { user: sessionUser } = useAuth()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -27,7 +28,7 @@ export default function CreateServerPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!session?.user?.email) return
+  if (!sessionUser?.email) return
 
     // Debug: check required fields and log payload
     const requiredFields = ['name', 'software', 'maxRAM', 'storage', 'nodeId']
@@ -43,7 +44,7 @@ export default function CreateServerPage() {
       ...formData,
       maxRAM: formData.maxRAM,
       storage: formData.storage,
-      userEmail: session.user.email
+  userEmail: sessionUser.email
     }
     console.log('[Server Create] Payload:', debugPayload)
     if (missingFields.length > 0) {

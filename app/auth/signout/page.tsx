@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+
+// Ensure this page is always rendered dynamically (no static prerender) because it relies on auth/session state
+export const dynamic = 'force-dynamic'
 // import { signOut } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

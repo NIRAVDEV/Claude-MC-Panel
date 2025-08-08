@@ -37,16 +37,23 @@ async function validateServerAccess(serverId: string, userId: string) {
 }
 
 // GET single server details
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { serverId: string } }
-) {
+// Next.js route handler signature simplified to only accept request; derive serverId from URL
+export async function GET(request: NextRequest) {
   try {
-    const { serverId } = await params;
-
+    // Extract serverId from pathname (supports nested route folder)
+    const url = new URL(request.url)
+    const parts = url.pathname.split('/')
+    const serversIdx = parts.findIndex(p => p === 'servers')
+    const serverId = serversIdx !== -1 ? parts[serversIdx + 1] : undefined
+    if (!serverId) {
+      return NextResponse.json(
+        { success: false, error: 'Missing serverId in URL' },
+        { status: 400 }
+      )
+    }
     // Validate authentication
-    const cookieStore = cookies()
-    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
+  const cookieStore = cookies()
+  const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
     console.log('[API/servers/[serverId]] sessionId:', sessionId)
     if (!sessionId) {
       console.warn('[API/servers/[serverId]] No session cookie found')
@@ -107,17 +114,24 @@ export async function GET(
 }
 
 // PUT - Update server settings
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { serverId: string } }
-) {
+export async function PUT(request: NextRequest) {
   try {
-    const { serverId } = params
+    // serverId from params context previously; now extract from URL
+    const url = new URL(request.url)
+    const parts = url.pathname.split('/')
+    const serversIdx = parts.findIndex(p => p === 'servers')
+    const serverId = serversIdx !== -1 ? parts[serversIdx + 1] : undefined
+    if (!serverId) {
+      return NextResponse.json(
+        { success: false, error: 'Missing serverId in URL' },
+        { status: 400 }
+      )
+    }
     const body = await request.json()
 
     // Validate authentication
-    const cookieStore = cookies()
-    const sessionId = (await (await cookieStore).get(lucia.sessionCookieName)?.value ?? null)
+  const cookieStore = cookies()
+  const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
 
     if (!sessionId) {
       return NextResponse.json(
@@ -216,16 +230,23 @@ export async function PUT(
 }
 
 // DELETE - Delete server (with Wings cleanup)
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { serverId: string } }
-) {
+export async function DELETE(request: NextRequest) {
   try {
-    const { serverId } = params
+    // Extract serverId from URL
+    const url = new URL(request.url)
+    const parts = url.pathname.split('/')
+    const serversIdx = parts.findIndex(p => p === 'servers')
+    const serverId = serversIdx !== -1 ? parts[serversIdx + 1] : undefined
+    if (!serverId) {
+      return NextResponse.json(
+        { success: false, error: 'Missing serverId in URL' },
+        { status: 400 }
+      )
+    }
 
     // Validate authentication
-    const cookieStore = cookies()
-    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
+  const cookieStore = cookies()
+  const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
     
     if (!sessionId) {
       return NextResponse.json(

@@ -3,7 +3,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useSession, signOut } from 'next-auth/react';
+// Using internal lucia-based auth context instead of next-auth
+import { useAuth } from '@/lib/auth-context';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { 
@@ -33,7 +34,7 @@ import {
 } from 'lucide-react';
 
 const Navigation = () => {
-  const { data: session, status } = useSession();
+  const { user: session, loading } = useAuth();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -53,11 +54,16 @@ const Navigation = () => {
     { href: '/admin/settings', label: 'Settings', icon: Settings },
   ];
 
-  const handleSignOut = () => {
-    signOut({ callbackUrl: '/auth/signout' });
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/signout', { method: 'POST' });
+      window.location.href = '/auth/signin';
+    } catch (e) {
+      console.error('Sign out failed', e);
+    }
   };
 
-  if (status === 'loading') {
+  if (loading) {
     return (
       <nav className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -108,7 +114,7 @@ const Navigation = () => {
                   })}
 
                   {/* Admin Navigation */}
-                  {session.user.role === 'ADMIN' && (
+                  {session.role === 'ADMIN' && (
                     <div className="flex items-center space-x-6 pl-6 border-l border-gray-200">
                       {adminNavItems.map((item) => {
                         const Icon = item.icon;
@@ -136,7 +142,7 @@ const Navigation = () => {
                   {/* Credits Display */}
                   <div className="flex items-center space-x-1 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-medium">
                     <Coins className="h-4 w-4" />
-                    <span>{session.user.credits || 0}</span>
+                    <span>{session.credits || 0}</span>
                   </div>
 
                   {/* User Dropdown */}
@@ -152,12 +158,12 @@ const Navigation = () => {
                       <DropdownMenuLabel className="font-normal">
                         <div className="flex flex-col space-y-1">
                           <p className="text-sm font-medium leading-none">
-                            {session.user.name || 'User'}
+                            {session.name || 'User'}
                           </p>
                           <p className="text-xs leading-none text-muted-foreground">
-                            {session.user.email}
+                            {session.email}
                           </p>
-                          {session.user.role === 'ADMIN' && (
+                          {session.role === 'ADMIN' && (
                             <Badge variant="secondary" className="w-fit text-xs">
                               Admin
                             </Badge>
@@ -237,12 +243,12 @@ const Navigation = () => {
                       <User className="h-4 w-4 text-white" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{session.user.name || 'User'}</p>
-                      <p className="text-xs text-gray-500">{session.user.email}</p>
+                      <p className="text-sm font-medium">{session.name || 'User'}</p>
+                      <p className="text-xs text-gray-500">{session.email}</p>
                     </div>
                     <div className="ml-auto flex items-center space-x-1 px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs font-medium">
                       <Coins className="h-3 w-3" />
-                      <span>{session.user.credits || 0}</span>
+                      <span>{session.credits || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -268,7 +274,7 @@ const Navigation = () => {
                 })}
 
                 {/* Admin Items */}
-                {session.user.role === 'ADMIN' && (
+                {session.role === 'ADMIN' && (
                   <>
                     <div className="border-t border-gray-200 my-2"></div>
                     {adminNavItems.map((item) => {

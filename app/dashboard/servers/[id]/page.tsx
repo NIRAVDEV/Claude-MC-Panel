@@ -2,6 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/lib/auth-context'
 // import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Play, Square, RotateCcw, Settings, FileText, Terminal, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { toast } from '@/components/ui/use-toast'
 
 interface Server {
@@ -44,8 +45,7 @@ interface ActionResponse {
 
 export default function ServerManagePage() {
   const params = useParams()
-  const [user, setUser] = useState<any>(null)
-  const [authLoading, setAuthLoading] = useState(true)
+  const { user, loading: authLoading } = useAuth()
   const [server, setServer] = useState<Server | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState('')
@@ -53,19 +53,7 @@ export default function ServerManagePage() {
 
   const serverId = params?.id as string
 
-  // Lucia session fetcher
-  async function fetchLuciaSession() {
-    try {
-      const res = await fetch('/api/auth/session', {
-        credentials: 'include'
-      })
-      if (!res.ok) return null
-      const data = await res.json()
-      return data.user || null
-    } catch {
-      return null
-    }
-  }
+  const router = useRouter()
 
   // Fetch server data
   const fetchServer = async () => {
@@ -168,16 +156,12 @@ export default function ServerManagePage() {
     }
   }
 
-  // Lucia session fetch
+  // Redirect if not authenticated after auth finished
   useEffect(() => {
-    async function loadSession() {
-      setAuthLoading(true)
-      const luciaUser = await fetchLuciaSession()
-      setUser(luciaUser)
-      setAuthLoading(false)
+    if (!authLoading && !user) {
+      router.push('/auth/signin')
     }
-    loadSession()
-  }, [])
+  }, [authLoading, user, router])
 
   // Initial load
   useEffect(() => {
@@ -210,17 +194,7 @@ export default function ServerManagePage() {
   }
 
   if (!user) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Authentication Required</h1>
-          <p className="text-muted-foreground mb-4">Please sign in to access your servers</p>
-          <Button asChild>
-            <Link href="/auth/lucia/signin">Sign In</Link>
-          </Button>
-        </div>
-      </div>
-    )
+    return null
   }
 
   if (isLoading) {
