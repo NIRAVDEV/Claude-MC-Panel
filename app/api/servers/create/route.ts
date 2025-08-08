@@ -40,7 +40,10 @@ interface ServerCreationError extends Error {
 // Wings Agent Communication Helper
 async function createServerOnNode(nodeUrl: string, nodeToken: string, serverData: WingsCreateServerRequest): Promise<WingsCreateServerResponse> {
   try {
-    const response = await fetch(`${nodeUrl}/server/create`, {
+    // Remove port 25575 from nodeUrl if present
+    const sanitizedNodeUrl = nodeUrl.replace(/:25575$/, '');
+
+    const response = await fetch(`${sanitizedNodeUrl}/server/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

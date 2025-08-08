@@ -21,7 +21,10 @@ async function sendWingsCommand(
   data: WingsControlRequest
 ): Promise<WingsResponse> {
   try {
-    const response = await fetch(`${nodeUrl}${endpoint}`, {
+    // Remove port 25575 from nodeUrl if present
+    const sanitizedNodeUrl = nodeUrl.replace(/:25575$/, '');
+
+    const response = await fetch(`${sanitizedNodeUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -21,7 +21,7 @@ async function sendWingsCommand(
   data: WingsControlRequest
 ): Promise<WingsResponse> {
   try {
-    const response = await fetch(`${nodeUrl}${endpoint}`, {
+    const response = await fetch(`${nodeUrl}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
     // Validate server access
     const server = await validateServerAccess(serverId, user.id)
     const nodeUrl = `http://${server.node.ip}:${server.node.port}`
+    console.log(`Starting server ${server.name} at ${nodeUrl}`)
 
     // Send start command to Wings agent
     const wingsResponse = await sendWingsCommand(

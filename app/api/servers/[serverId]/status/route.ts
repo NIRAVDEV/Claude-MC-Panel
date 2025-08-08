@@ -21,7 +21,10 @@ async function getServerStatusFromWings(
       userEmail
     })
 
-    const response = await fetch(`${nodeUrl}/server/status?${params}`, {
+    // Remove port 25575 from nodeUrl if present
+    const sanitizedNodeUrl = nodeUrl.replace(/:25575$/, '')
+
+    const response = await fetch(`${sanitizedNodeUrl}/server/status?${params}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${nodeToken}`
