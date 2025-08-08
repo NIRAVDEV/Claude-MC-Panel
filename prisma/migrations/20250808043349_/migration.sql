@@ -1,31 +1,31 @@
 -- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('USER', 'ADMIN');
+CREATE TYPE "public"."UserRole" AS ENUM ('USER', 'ADMIN');
 
 -- CreateEnum
-CREATE TYPE "NodeStatus" AS ENUM ('ONLINE', 'OFFLINE', 'MAINTENANCE', 'ERROR');
+CREATE TYPE "public"."NodeStatus" AS ENUM ('ONLINE', 'OFFLINE', 'MAINTENANCE', 'ERROR');
 
 -- CreateEnum
-CREATE TYPE "ServerStatus" AS ENUM ('CREATING', 'CREATED', 'RUNNING', 'STOPPED', 'STARTING', 'STOPPING', 'ERROR', 'INSTALLING', 'REMOVING', 'REMOVED');
+CREATE TYPE "public"."ServerStatus" AS ENUM ('CREATING', 'CREATED', 'RUNNING', 'STOPPED', 'STARTING', 'STOPPING', 'RESTARTING', 'ERROR', 'INSTALLING', 'REMOVING', 'REMOVED');
 
 -- CreateEnum
-CREATE TYPE "LogLevel" AS ENUM ('DEBUG', 'INFO', 'WARN', 'ERROR');
+CREATE TYPE "public"."LogLevel" AS ENUM ('DEBUG', 'INFO', 'WARN', 'ERROR');
 
 -- CreateEnum
-CREATE TYPE "TransactionType" AS ENUM ('CREDIT_PURCHASE', 'SERVER_COST', 'ADMIN_CREDITS', 'WELCOME_BONUS', 'AD_REWARD', 'TASK_REWARD', 'REFERRAL_BONUS', 'ADMIN_ADJUSTMENT', 'COMPLETED', 'FAILED');
+CREATE TYPE "public"."TransactionType" AS ENUM ('CREDIT_PURCHASE', 'SERVER_COST', 'ADMIN_CREDITS', 'WELCOME_BONUS', 'AD_REWARD', 'TASK_REWARD', 'REFERRAL_BONUS', 'ADMIN_ADJUSTMENT', 'COMPLETED', 'FAILED');
 
 -- CreateEnum
-CREATE TYPE "TicketStatus" AS ENUM ('OPEN', 'IN_PROGRESS', 'WAITING_USER', 'RESOLVED', 'CLOSED');
+CREATE TYPE "public"."TicketStatus" AS ENUM ('OPEN', 'IN_PROGRESS', 'WAITING_USER', 'RESOLVED', 'CLOSED');
 
 -- CreateEnum
-CREATE TYPE "Priority" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'URGENT');
+CREATE TYPE "public"."Priority" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'URGENT');
 
 -- CreateTable
-CREATE TABLE "users" (
+CREATE TABLE "public"."users" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "name" TEXT,
-    "role" "UserRole" NOT NULL DEFAULT 'USER',
+    "role" "public"."UserRole" NOT NULL DEFAULT 'USER',
     "credits" INTEGER NOT NULL DEFAULT 500,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE "users" (
 );
 
 -- CreateTable
-CREATE TABLE "sessions" (
+CREATE TABLE "public"."sessions" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "expiresAt" TIMESTAMP(3) NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE "sessions" (
 );
 
 -- CreateTable
-CREATE TABLE "nodes" (
+CREATE TABLE "public"."nodes" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "ip" TEXT NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE "nodes" (
     "maxRAM" INTEGER NOT NULL DEFAULT 32768,
     "maxStorage" INTEGER NOT NULL DEFAULT 500000,
     "location" TEXT,
-    "status" "NodeStatus" NOT NULL DEFAULT 'OFFLINE',
+    "status" "public"."NodeStatus" NOT NULL DEFAULT 'OFFLINE',
     "description" TEXT,
     "scheme" TEXT NOT NULL DEFAULT 'https',
     "behindProxy" BOOLEAN NOT NULL DEFAULT false,
@@ -75,7 +75,7 @@ CREATE TABLE "nodes" (
 );
 
 -- CreateTable
-CREATE TABLE "servers" (
+CREATE TABLE "public"."servers" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "software" TEXT NOT NULL DEFAULT 'VANILLA',
@@ -83,7 +83,7 @@ CREATE TABLE "servers" (
     "ram" INTEGER NOT NULL DEFAULT 1024,
     "storage" INTEGER NOT NULL DEFAULT 5120,
     "port" INTEGER,
-    "status" "ServerStatus" NOT NULL DEFAULT 'STOPPED',
+    "status" "public"."ServerStatus" NOT NULL DEFAULT 'STOPPED',
     "nodeId" TEXT NOT NULL,
     "containerId" TEXT,
     "userId" TEXT NOT NULL,
@@ -95,18 +95,18 @@ CREATE TABLE "servers" (
 );
 
 -- CreateTable
-CREATE TABLE "server_logs" (
+CREATE TABLE "public"."server_logs" (
     "id" TEXT NOT NULL,
     "serverId" TEXT NOT NULL,
     "content" TEXT NOT NULL,
-    "level" "LogLevel" NOT NULL DEFAULT 'INFO',
+    "level" "public"."LogLevel" NOT NULL DEFAULT 'INFO',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "server_logs_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "server_backups" (
+CREATE TABLE "public"."server_backups" (
     "id" TEXT NOT NULL,
     "serverId" TEXT NOT NULL,
     "filename" TEXT NOT NULL,
@@ -117,7 +117,7 @@ CREATE TABLE "server_backups" (
 );
 
 -- CreateTable
-CREATE TABLE "websocket_connections" (
+CREATE TABLE "public"."websocket_connections" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
     "serverId" TEXT,
@@ -130,11 +130,11 @@ CREATE TABLE "websocket_connections" (
 );
 
 -- CreateTable
-CREATE TABLE "transactions" (
+CREATE TABLE "public"."transactions" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "amount" INTEGER NOT NULL,
-    "type" "TransactionType" NOT NULL,
+    "type" "public"."TransactionType" NOT NULL,
     "description" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'COMPLETED',
     "metadata" JSONB,
@@ -144,7 +144,7 @@ CREATE TABLE "transactions" (
 );
 
 -- CreateTable
-CREATE TABLE "credit_packages" (
+CREATE TABLE "public"."credit_packages" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "credits" INTEGER NOT NULL,
@@ -157,7 +157,7 @@ CREATE TABLE "credit_packages" (
 );
 
 -- CreateTable
-CREATE TABLE "ad_campaigns" (
+CREATE TABLE "public"."ad_campaigns" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "credits" INTEGER NOT NULL,
@@ -170,13 +170,13 @@ CREATE TABLE "ad_campaigns" (
 );
 
 -- CreateTable
-CREATE TABLE "support_tickets" (
+CREATE TABLE "public"."support_tickets" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "subject" TEXT NOT NULL,
     "content" TEXT NOT NULL,
-    "status" "TicketStatus" NOT NULL DEFAULT 'OPEN',
-    "priority" "Priority" NOT NULL DEFAULT 'MEDIUM',
+    "status" "public"."TicketStatus" NOT NULL DEFAULT 'OPEN',
+    "priority" "public"."Priority" NOT NULL DEFAULT 'MEDIUM',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -184,7 +184,7 @@ CREATE TABLE "support_tickets" (
 );
 
 -- CreateTable
-CREATE TABLE "ticket_messages" (
+CREATE TABLE "public"."ticket_messages" (
     "id" TEXT NOT NULL,
     "ticketId" TEXT NOT NULL,
     "content" TEXT NOT NULL,
@@ -195,7 +195,7 @@ CREATE TABLE "ticket_messages" (
 );
 
 -- CreateTable
-CREATE TABLE "system_settings" (
+CREATE TABLE "public"."system_settings" (
     "id" TEXT NOT NULL,
     "key" TEXT NOT NULL,
     "value" TEXT NOT NULL,
@@ -205,43 +205,43 @@ CREATE TABLE "system_settings" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+CREATE UNIQUE INDEX "users_email_key" ON "public"."users"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "nodes_name_key" ON "nodes"("name");
+CREATE UNIQUE INDEX "nodes_name_key" ON "public"."nodes"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "nodes_verificationToken_key" ON "nodes"("verificationToken");
+CREATE UNIQUE INDEX "nodes_verificationToken_key" ON "public"."nodes"("verificationToken");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "servers_containerId_key" ON "servers"("containerId");
+CREATE UNIQUE INDEX "servers_containerId_key" ON "public"."servers"("containerId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "servers_name_userId_key" ON "servers"("name", "userId");
+CREATE UNIQUE INDEX "servers_name_userId_key" ON "public"."servers"("name", "userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "system_settings_key_key" ON "system_settings"("key");
+CREATE UNIQUE INDEX "system_settings_key_key" ON "public"."system_settings"("key");
 
 -- AddForeignKey
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "servers" ADD CONSTRAINT "servers_nodeId_fkey" FOREIGN KEY ("nodeId") REFERENCES "nodes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."servers" ADD CONSTRAINT "servers_nodeId_fkey" FOREIGN KEY ("nodeId") REFERENCES "public"."nodes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "servers" ADD CONSTRAINT "servers_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."servers" ADD CONSTRAINT "servers_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "server_logs" ADD CONSTRAINT "server_logs_serverId_fkey" FOREIGN KEY ("serverId") REFERENCES "servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."server_logs" ADD CONSTRAINT "server_logs_serverId_fkey" FOREIGN KEY ("serverId") REFERENCES "public"."servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "server_backups" ADD CONSTRAINT "server_backups_serverId_fkey" FOREIGN KEY ("serverId") REFERENCES "servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."server_backups" ADD CONSTRAINT "server_backups_serverId_fkey" FOREIGN KEY ("serverId") REFERENCES "public"."servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."support_tickets" ADD CONSTRAINT "support_tickets_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "ticket_messages" ADD CONSTRAINT "ticket_messages_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "support_tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."ticket_messages" ADD CONSTRAINT "ticket_messages_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "public"."support_tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;

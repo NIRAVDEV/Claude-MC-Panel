@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import { toast } from '@/components/ui/use-toast'
 
 export default function CreateServerPage() {
   const { data: session } = useSession()
@@ -27,15 +28,37 @@ export default function CreateServerPage() {
     e.preventDefault()
     if (!session?.user?.email) return
 
+    // Debug: check required fields and log payload
+    const requiredFields = ['name', 'software', 'ram', 'storage']
+    let missingFields: string[] = []
+    for (const field of requiredFields) {
+      const value = (formData as any)[field]
+      if (!value || (typeof value === 'string' && value.trim() === '')) {
+        missingFields.push(field)
+      }
+    }
+    const debugPayload = { ...formData, userEmail: session.user.email }
+    console.log('[Server Create] Payload:', debugPayload)
+    if (missingFields.length > 0) {
+      console.warn('[Server Create] Missing/Invalid fields:', missingFields)
+    }
+    toast({
+      title: 'Debug Server Payload',
+      description:
+        'Payload: ' + JSON.stringify(debugPayload, null, 2) +
+        (missingFields.length > 0 ? '\nMissing/Invalid: ' + missingFields.join(', ') : ''),
+      variant: missingFields.length > 0 ? 'destructive' : 'default',
+    })
+    if (missingFields.length > 0) {
+      return
+    }
+
     setIsLoading(true)
     try {
       const response = await fetch('/api/servers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          userEmail: session.user.email
-        })
+        body: JSON.stringify(debugPayload)
       })
 
       if (response.ok) {
