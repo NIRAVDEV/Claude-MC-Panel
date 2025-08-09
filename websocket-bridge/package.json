@@ -1,0 +1,20 @@
+{
+  "name": "websocket-bridge",
+  "version": "1.0.0",
+  "description": "WebSocket bridge for Wings agent with SSL support",
+  "main": "websocket-bridge.js",
+  "scripts": {
+    "start": "node websocket-bridge.js",
+    "dev": "nodemon websocket-bridge.js",
+    "test": "node test-bridge.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": ["websocket", "proxy", "bridge", "ssl", "wings"],
+  "author": "Your Name",
+  "license": "MIT"
+}
