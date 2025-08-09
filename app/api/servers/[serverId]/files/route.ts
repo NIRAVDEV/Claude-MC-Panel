@@ -1,383 +1,124 @@
-// Utility to extract serverId from the URL
-function getServerIdFromUrl(request: NextRequest): string | null {
-  const match = request.nextUrl.pathname.match(/\/servers\/([^/]+)\/files/)
-  return match ? match[1] : null
-}
-// app/api/servers/[serverId]/files/route.ts
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { lucia } from '@/lib/lucia'
-import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import { requireAuth } from "@/lib/auth-utils"
 
-interface WingsFileRequest {
-  path: string
-  content?: string
-}
-
-interface WingsFileResponse {
-  status: string
-  message?: string
-  content?: string
-}
-
-async function sendWingsFileRequest(
-  nodeUrl: string,
+async function sendWingsRequest(
+  nodeIp: string,
+  nodePort: number,
   nodeToken: string,
-  method: string,
-  path?: string,
-  content?: string
-): Promise<WingsFileResponse | Buffer> {
-  try {
-    let url = `${nodeUrl}/file_manager`
-    let requestInit: RequestInit = {
-      method,
-      headers: {
-        'Authorization': `Bearer ${nodeToken}`
-      }
+  endpoint: string,
+  method: string = 'GET',
+  data?: any
+) {
+  const url = `http://${nodeIp}:${nodePort}${endpoint}`
+  
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${nodeToken}`,
     }
-
-    if (method === 'GET' && path) {
-      url += `?path=${encodeURIComponent(path)}`
-    } else if (method === 'POST') {
-      requestInit.headers = {
-        ...requestInit.headers,
-        'Content-Type': 'application/json'
-      }
-      requestInit.body = JSON.stringify({ path, content })
-    }
-
-    const response = await fetch(url, requestInit)
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Wings API Error: ${response.status} - ${errorText}`)
-    }
-
-    // For GET requests, might return file content directly
-    if (method === 'GET') {
-      const contentType = response.headers.get('content-type')
-      if (contentType?.includes('application/json')) {
-        return await response.json() as WingsFileResponse
-      } else {
-        return Buffer.from(await response.arrayBuffer())
-      }
-    }
-
-    return await response.json() as WingsFileResponse
-  } catch (error) {
-    console.error('Wings file API communication failed:', error)
-    throw new Error(`Failed to communicate with Wings agent: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
+  
+  if (data && method !== 'GET') {
+    options.body = JSON.stringify(data)
+  }
+  
+  const response = await fetch(url, options)
+  
+  if (!response.ok) {
+    throw new Error(`Wings API Error: ${response.status} - ${await response.text()}`)
+  }
+  
+  return response
 }
 
-async function validateServerAccess(serverId: string, userId: string) {
-  const server = await prisma.server.findFirst({
-    where: {
-      id: serverId,
-      userId: userId
-    },
-    include: {
-      node: {
-        select: {
-          id: true,
-          name: true,
-          ip: true,
-          port: true,
-          verificationToken: true,
-          status: true
-        }
-      },
-      user: {
-        select: {
-          email: true
-        }
-      }
-    }
-  })
-
-  if (!server) {
-    throw new Error('Server not found or access denied')
-  }
-
-  if (server.node.status !== 'ONLINE') {
-    throw new Error('Server node is not online')
-  }
-
-  return server
-}
-
-// GET - Read file content
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ serverId: string }> }
+) {
   try {
-    const serverId = getServerIdFromUrl(request)
-    if (!serverId) {
-      return NextResponse.json({ success: false, error: 'Missing serverId in URL' }, { status: 400 })
-    }
-    const url = new URL(request.url)
-    const filePath = url.searchParams.get('path')
-
-    if (!filePath) {
-      return NextResponse.json(
-        { success: false, error: 'Missing file path parameter' },
-        { status: 400 }
-      )
-    }
-
-    // Validate authentication
-    const cookieStore = cookies()
-    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
+    const { user } = await requireAuth()
+    const { serverId } = await context.params
     
-    if (!sessionId) {
-      return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
-      )
+    const { searchParams } = new URL(request.url)
+    const path = searchParams.get('path') || '/'
+    
+    // Get server with node info
+    const server = await prisma.server.findFirst({
+      where: { id: serverId, userId: user.id },
+      include: { node: true }
+    })
+    
+    if (!server || !server.node) {
+      return NextResponse.json({ error: "Server not found" }, { status: 404 })
     }
-
-    const { user } = await lucia.validateSession(sessionId)
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid session' },
-        { status: 401 }
-      )
-    }
-
-    // Validate server access
-    const server = await validateServerAccess(serverId, user.id)
-    const nodeUrl = `http://${server.node.ip}:${server.node.port}`
-
-    // Build server-specific file path
-    const userId = server.user.email.split('@')[0]
-    const containerId = `${server.name}-${userId}`.replace(/[^a-zA-Z0-9.-]/g, '')
-    const serverFilePath = `${containerId}/${filePath}`
-
-    // Get file content from Wings agent
-    const wingsResponse = await sendWingsFileRequest(
-      nodeUrl,
+    
+    // Call Wings agent to list files
+    const response = await sendWingsRequest(
+      server.node.ip,
+      server.node.port,
       server.node.verificationToken,
-      'GET',
-      serverFilePath
+      `/files/list?serverName=${encodeURIComponent(server.name)}&userEmail=${encodeURIComponent(user.email || 'user@example.com')}&path=${encodeURIComponent(path)}`
     )
-
-    // Handle binary content
-    if (Buffer.isBuffer(wingsResponse)) {
-      return new NextResponse(new Uint8Array(wingsResponse), {
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'Content-Disposition': `attachment; filename="${filePath.split('/').pop()}"`
-        }
-      })
-    }
-
-    // Handle JSON response
-    const fileResponse = wingsResponse as WingsFileResponse
-    if (fileResponse.content !== undefined) {
-      return NextResponse.json({
-        success: true,
-        path: filePath,
-        content: fileResponse.content,
-        serverId: serverId
-      })
-    }
-
-    return NextResponse.json(
-      { success: false, error: 'File not found or unreadable' },
-      { status: 404 }
-    )
-
-  } catch (error) {
-    console.error('File read API error:', error)
     
+    const data = await response.json()
+    return NextResponse.json(data)
+    
+  } catch (error) {
+    console.error('File listing error:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Internal server error'
-      },
+      { error: error instanceof Error ? error.message : "Failed to list files" },
       { status: 500 }
     )
   }
 }
 
-// POST - Write file content
-export async function POST(request: NextRequest) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ serverId: string }> }
+) {
   try {
-    const serverId = getServerIdFromUrl(request)
-    if (!serverId) {
-      return NextResponse.json({ success: false, error: 'Missing serverId in URL' }, { status: 400 })
-    }
-    const { path: filePath, content } = await request.json()
-
-    if (!filePath || content === undefined) {
-      return NextResponse.json(
-        { success: false, error: 'Missing file path or content' },
-        { status: 400 }
-      )
-    }
-
-    // Validate authentication
-    const cookieStore = cookies()
-    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
+    const { user } = await requireAuth()
+    const { serverId } = await context.params
+    const { path } = await request.json()
     
-    if (!sessionId) {
-      return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
-      )
+    if (!path) {
+      return NextResponse.json({ error: "Path is required" }, { status: 400 })
     }
-
-    const { user } = await lucia.validateSession(sessionId)
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid session' },
-        { status: 401 }
-      )
+    
+    // Get server with node info
+    const server = await prisma.server.findFirst({
+      where: { id: serverId, userId: user.id },
+      include: { node: true }
+    })
+    
+    if (!server || !server.node) {
+      return NextResponse.json({ error: "Server not found" }, { status: 404 })
     }
-
-    // Validate server access
-    const server = await validateServerAccess(serverId, user.id)
-    const nodeUrl = `http://${server.node.ip}:${server.node.port}`
-
-    // Build server-specific file path
-    const userId = server.user.email.split('@')[0]
-    const containerId = `${server.name}-${userId}`.replace(/[^a-zA-Z0-9.-]/g, '')
-    const serverFilePath = `${containerId}/${filePath}`
-
-    // Send file content to Wings agent
-    const wingsResponse = await sendWingsFileRequest(
-      nodeUrl,
+    
+    // Call Wings agent to delete file
+    const response = await sendWingsRequest(
+      server.node.ip,
+      server.node.port,
       server.node.verificationToken,
+      `/files/delete`,
       'POST',
-      serverFilePath,
-      content
-    ) as WingsFileResponse
-
-    if (wingsResponse.status !== 'ok') {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to write file',
-          wingsError: wingsResponse.message 
-        },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'File written successfully',
-      path: filePath,
-      serverId: serverId
-    })
-
-  } catch (error) {
-    console.error('File write API error:', error)
-    
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Internal server error'
-      },
-      { status: 500 }
+      {
+        serverName: server.name,
+        userEmail: user.email || 'user@example.com',
+        path,
+        token: server.node.verificationToken
+      }
     )
-  }
-}
-
-// PUT - Upload file (multipart form data)
-export async function PUT(request: NextRequest) {
-  try {
-    const serverId = getServerIdFromUrl(request)
-    if (!serverId) {
-      return NextResponse.json({ success: false, error: 'Missing serverId in URL' }, { status: 400 })
-    }
-
-    // Validate authentication
-    const cookieStore = cookies()
-    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
     
-    if (!sessionId) {
-      return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
-      )
-    }
-
-    const { user } = await lucia.validateSession(sessionId)
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid session' },
-        { status: 401 }
-      )
-    }
-
-    // Validate server access
-    const server = await validateServerAccess(serverId, user.id)
-    const nodeUrl = `http://${server.node.ip}:${server.node.port}`
-
-    // Parse form data
-    const formData = await request.formData()
-    const file = formData.get('file') as File
-    const uploadPath = formData.get('path') as string
-
-    if (!file || !uploadPath) {
-      return NextResponse.json(
-        { success: false, error: 'Missing file or upload path' },
-        { status: 400 }
-      )
-    }
-
-    // Build server-specific upload path
-    const userId = server.user.email.split('@')[0]
-    const containerId = `${server.name}-${userId}`.replace(/[^a-zA-Z0-9.-]/g, '')
-    const serverUploadPath = `${containerId}/${uploadPath}`
-
-    // Create new FormData for Wings agent
-    const wingsFormData = new FormData()
-    wingsFormData.append('file', file)
-    wingsFormData.append('path', serverUploadPath)
-
-    // Send file to Wings agent
-    const response = await fetch(`${nodeUrl}/file/upload`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${server.node.verificationToken}`
-      },
-      body: wingsFormData
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Wings upload failed: ${response.status} - ${errorText}`)
-    }
-
-    const wingsResponse: WingsFileResponse = await response.json()
-
-    if (wingsResponse.status !== 'ok') {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to upload file',
-          wingsError: wingsResponse.message 
-        },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'File uploaded successfully',
-      filename: file.name,
-      path: uploadPath,
-      serverId: serverId
-    })
-
+    const data = await response.json()
+    return NextResponse.json(data)
+    
   } catch (error) {
-    console.error('File upload API error:', error)
-    
+    console.error('File deletion error:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Internal server error'
-      },
+      { error: error instanceof Error ? error.message : "Failed to delete file" },
       { status: 500 }
     )
   }
