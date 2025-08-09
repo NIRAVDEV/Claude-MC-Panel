@@ -33,7 +33,7 @@ wss.on('connection', (client, req) => {
         }
 
         // Connect to Agent WS
-        const agentUrl = `${server.node.scheme}://${server.node.ip}:${server.node.daemonPort}/logs`;
+        const agentUrl = `${server.node.scheme}://${server.node.ip}:${server.node.daemonPort}/ws/console`;
         const agentWs = new WebSocket(agentUrl, {
           headers: { 'x-verification-token': server.node.verificationToken }
         });
