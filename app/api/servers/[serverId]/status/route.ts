@@ -13,12 +13,14 @@ async function getServerStatusFromWings(
   nodeUrl: string,
   nodeToken: string,
   serverName: string,
-  userEmail: string
+  userEmail: string,
+  nodeId: string
 ): Promise<string> {
   try {
     const params = new URLSearchParams({
       serverName,
-      userEmail
+      userEmail,
+      nodeId // Include nodeId in the request
     })
 
     // Remove port 25575 from nodeUrl if present
@@ -143,13 +145,13 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Get real-time status from Wings agent
     const nodeUrl = `http://${server.node.ip}:${server.node.port}`
     const dockerStatus = await getServerStatusFromWings(
       nodeUrl,
       server.node.verificationToken,
       server.name,
-      server.user.email
+      server.user.email,
+      server.node.id
     )
 
     // Map Docker status to our internal status

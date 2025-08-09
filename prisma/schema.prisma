@@ -212,6 +212,7 @@ enum TransactionType {
   ADMIN_ADJUSTMENT
   COMPLETED
   FAILED
+  REFUND
 }
 
 // ==================== CREDIT PACKAGES ====================

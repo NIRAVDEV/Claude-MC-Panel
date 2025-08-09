@@ -1,40 +1,55 @@
-// app/api/servers/[serverId]/stop/route.ts
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { lucia } from '@/lib/lucia'
-import { cookies } from 'next/headers'
-
-interface WingsControlRequest {
-  serverName: string
-  userEmail: string
-}
+// app/api/servers/[serverId]/start/route.ts
+import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import { requireAuth } from "@/lib/auth-utils"
 
 interface WingsResponse {
   status: string
   message?: string
+  data?: any
 }
 
 async function sendWingsCommand(
-  nodeUrl: string, 
-  nodeToken: string, 
-  endpoint: string, 
-  data: WingsControlRequest
+  nodeIp: string,
+  nodePort: number,
+  nodeToken: string,
+  serverId: string,
+  serverName: string,
+  userEmail: string,
+  command: string,
+  software?: string
 ): Promise<WingsResponse> {
+  // 🔧 FIX: Use the actual Wings agent endpoints
+  const wingsEndpoint = `http://${nodeIp}:${nodePort}/server/${command}`
+  
+  console.log(`Sending ${command} command to Wings endpoint: ${wingsEndpoint}`)
+  
+  // 🔧 FIX: Wings agent expects specific request format
+  const requestBody = {
+    serverName: serverName,
+    userEmail: userEmail,
+    nodeId: serverId, // Wings uses this as container identifier
+    token: nodeToken,
+    ...(software && { software }) // Include software for create commands
+  }
+  
+  console.log('Wings request body:', requestBody)
+  
   try {
-    // Remove port 25575 from nodeUrl if present
-    const sanitizedNodeUrl = nodeUrl.replace(/:25575$/, '');
-
-    const response = await fetch(`${sanitizedNodeUrl}${endpoint}`, {
+    const response = await fetch(wingsEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${nodeToken}`
+        'Authorization': `Bearer ${nodeToken}`,
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify(requestBody),
     })
 
+    console.log(`Wings API response status: ${response.status}`)
+    
     if (!response.ok) {
       const errorText = await response.text()
+      console.error(`Wings API Error: ${response.status} - ${errorText}`)
       throw new Error(`Wings API Error: ${response.status} - ${errorText}`)
     }
 
@@ -45,120 +60,89 @@ async function sendWingsCommand(
   }
 }
 
-async function validateServerAccess(serverId: string, userId: string) {
-  const server = await prisma.server.findFirst({
-    where: {
-      id: serverId,
-      userId: userId
-    },
-    include: {
-      node: {
-        select: {
-          id: true,
-          name: true,
-          ip: true,
-          port: true,
-          verificationToken: true,
-          status: true
-        }
-      },
-      user: {
-        select: {
-          email: true
-        }
-      }
-    }
-  })
-
-  if (!server) {
-    throw new Error('Server not found or access denied')
-  }
-
-  if (server.node.status !== 'ONLINE') {
-    throw new Error('Server node is not online')
-  }
-
-  return server
-}
-
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ serverId: string }> }
+) {
   try {
-    // Extract serverId from the URL pathname
-    const url = new URL(request.url)
-    const pathParts = url.pathname.split('/')
-    const serversIdx = pathParts.findIndex(p => p === 'servers')
-    const serverId = serversIdx !== -1 ? pathParts[serversIdx + 1] : undefined
-    if (!serverId) {
-      return NextResponse.json({ success: false, error: 'Missing serverId in URL' }, { status: 400 })
-    }
+    const { user } = await requireAuth()
+    const { serverId } = await context.params
 
-    // Validate authentication
-    const cookieStore = cookies()
-    const sessionId = (await cookieStore).get(lucia.sessionCookieName)?.value ?? null
-    
-    if (!sessionId) {
-      return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
-      )
-    }
+    console.log(`Starting server ${serverId} for user ${user.id}`)
 
-    const { user } = await lucia.validateSession(sessionId)
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid session' },
-        { status: 401 }
-      )
-    }
-
-    // Validate server access
-    const server = await validateServerAccess(serverId, user.id)
-    const nodeUrl = `http://${server.node.ip}:${server.node.port}`
-
-    // Send stop command to Wings agent
-    const wingsResponse = await sendWingsCommand(
-      nodeUrl,
-      server.node.verificationToken,
-      '/server/stop',
-      {
-        serverName: server.name,
-        userEmail: server.user.email
+    // Get server with node information
+    const server = await prisma.server.findFirst({
+      where: {
+        id: serverId,
+        userId: user.id,
+      },
+      include: {
+        node: true
       }
-    )
+    })
 
-    if (wingsResponse.status !== 'ok') {
+    if (!server) {
+      console.error(`Server not found: ${serverId} for user ${user.id}`)
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to stop server',
-          wingsError: wingsResponse.message 
-        },
-        { status: 500 }
+        { error: "Server not found or access denied" },
+        { status: 404 }
       )
     }
+
+    if (!server.node) {
+      console.error(`Server ${serverId} has no assigned node`)
+      return NextResponse.json(
+        { error: "Server has no assigned node" },
+        { status: 400 }
+      )
+    }
+
+    // 🔧 FIX: Check for ONLINE status (Wings agent uses different statuses)
+    if (server.node.status !== 'ONLINE') {
+      console.error(`Node ${server.node.name} is not online: ${server.node.status}`)
+      return NextResponse.json(
+        { error: `Node ${server.node.name} is not online` },
+        { status: 503 }
+      )
+    }
+
+    console.log(`Server ${serverId} is assigned to node: ${server.node.name} (${server.node.ip}:${server.node.port})`)
+
+    // 🔧 FIX: Call Wings agent with correct parameters
+    const result = await sendWingsCommand(
+      server.node.ip,
+      server.node.port,
+      server.node.verificationToken,
+      server.node.id, // Use node ID for Wings agent
+      server.name,
+      user.email || 'admin@example.com',
+      'stop'
+    )
 
     // Update server status in database
     await prisma.server.update({
       where: { id: serverId },
-      data: { 
-        status: 'STOPPING',
-        updatedAt: new Date()
-      }
+      data: { status: 'STOPPING' }
     })
+
+    console.log(`Server ${serverId} stop command sent successfully`)
 
     return NextResponse.json({
       success: true,
-      message: 'Server stop command sent successfully',
-      serverId: serverId
+      message: "Server stop command sent successfully",
+      serverName: server.name,
+      nodeName: server.node.name,
+      wingsEndpoint: `${server.node.ip}:${server.node.port}`,
+      result
     })
 
   } catch (error) {
-    console.error('Stop server API error:', error)
+    console.error("Start server API error:", error)
     
     return NextResponse.json(
       { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Internal server error'
+        error: error instanceof Error ? error.message : "Failed to start server",
+        details: error instanceof Error ? error.stack : undefined
       },
       { status: 500 }
     )
