@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update user credits and create transaction in a single transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: { user: { update: (arg0: { where: { id: string; }; data: { credits: { increment: any; }; }; select: { credits: boolean; }; }) => any; }; transaction: { create: (arg0: { data: { userId: string; type: string; amount: any; description: any; }; }) => any; }; }) => {
       // Update user credits
       const updatedUser = await tx.user.update({
         where: { id: session.user.id },

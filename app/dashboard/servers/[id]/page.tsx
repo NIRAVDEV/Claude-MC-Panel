@@ -8,6 +8,7 @@ import { Server, HardDrive, Cpu, MapPin } from 'lucide-react'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth-utils'
 import { redirect } from 'next/navigation'
+import { SocketConsole } from '@/components/SocketConsole'
 
 interface ServerPageProps {
   params: Promise<{ serverId: string }>
@@ -148,7 +149,7 @@ export default async function ServerPage({ params }: ServerPageProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ServerConsole
+                {/* <ServerConsole
                   serverId={server.id}
                   serverName={server.name}
                   userEmail={user.email || 'user@example.com'}
@@ -156,7 +157,12 @@ export default async function ServerPage({ params }: ServerPageProps) {
                   nodeIp={server.node.ip}
                   nodePort={server.node.port}
                   nodeToken={server.node.verificationToken}
-                />
+                /> */}
+                <SocketConsole
+                  serverId={server.id}
+                  serverName={server.name}
+                  userId={user.id}
+                  nodeId={server.node.id} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -201,7 +207,7 @@ export default async function ServerPage({ params }: ServerPageProps) {
                       disabled
                     />
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm font-medium">Memory (MB)</label>
@@ -212,7 +218,7 @@ export default async function ServerPage({ params }: ServerPageProps) {
                         disabled
                       />
                     </div>
-                    
+
                     <div>
                       <label className="text-sm font-medium">Storage (MB)</label>
                       <input
@@ -223,10 +229,10 @@ export default async function ServerPage({ params }: ServerPageProps) {
                       />
                     </div>
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-medium">Server Type</label>
-                    <select 
+                    <select
                       value={server.software}
                       className="w-full mt-1 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       disabled

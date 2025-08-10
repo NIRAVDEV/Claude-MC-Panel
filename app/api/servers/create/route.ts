@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create database transaction for server creation and credit deduction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: { server: { create: (arg0: { data: { name: string; software: string; ram: number; storage: number; status: string; containerId: string; userId: any; nodeId: any; createdAt: Date; updatedAt: Date }; include: { user: { select: { name: boolean; email: boolean } }; node: { select: { name: boolean; ip: boolean } } } }) => any }; user: { update: (arg0: { where: { id: any }; data: { credits: { decrement: number } } }) => any }; transaction: { create: (arg0: { data: { userId: any; amount: number; type: string; description: string } }) => any } }) => {
       // Create server record
       const newServer = await tx.server.create({
         data: {
@@ -364,7 +364,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      servers: servers.map(server => ({
+      servers: servers.map((server: { id: any; name: any; software: any; ram: any; storage: any; status: any; containerId: any; node: any; createdAt: any; updatedAt: any }) => ({
         id: server.id,
         name: server.name,
         software: server.software,

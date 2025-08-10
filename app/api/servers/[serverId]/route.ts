@@ -275,7 +275,7 @@ export async function DELETE(request: NextRequest) {
     // 4. Then delete from database
 
     // Delete server from database
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: { transaction: { deleteMany: (arg0: { where: { id: string } }) => any }; server: { delete: (arg0: { where: { id: string } }) => any } }) => {
       // Delete related records first (if any)
       await tx.transaction.deleteMany({
         where: { id: serverId }

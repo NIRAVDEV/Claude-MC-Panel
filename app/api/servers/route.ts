@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
     })
 
     let port = 25565
-    const usedPorts = new Set(existingPorts.map(s => s.port))
+    const usedPorts = new Set(existingPorts.map((s: { port: any }) => s.port))
     
     while (usedPorts.has(port) && port < 35565) {
       port++
@@ -199,7 +199,16 @@ export async function POST(request: NextRequest) {
     console.log(`Creating server ${name} on node ${selectedNode.name}`)
     
     // 💰 Use database transaction to ensure atomicity
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: {
+        user: { update: (arg0: { where: { id: string }; data: { credits: { decrement: number } } }) => any }; server: {
+          create: (arg0: {
+            data: {
+              name: any; software: any; ram: any; status: string; userId: string; nodeId: any // 🎯 KEY: Assign to selected node
+              port: number; version: any
+            }; include: { node: boolean; user: { select: { id: boolean; email: boolean; name: boolean; credits: boolean } } }
+          }) => any
+        }; transaction: { create: (arg0: { data: { userId: string; type: string; amount: number; description: string; metadata: { serverId: any; serverName: any; memory: number; nodeId: any; nodeName: any } } }) => any }
+      }) => {
       // 1. Deduct credits from user
       const updatedUser = await tx.user.update({
         where: { id: user.id },
@@ -326,7 +335,17 @@ export async function POST(request: NextRequest) {
       
       try {
         // Refund credits and mark server as failed
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: {
+            user: { update: (arg0: { where: { id: string }; data: { credits: { increment: number } } }) => any }; server: { update: (arg0: { where: { id: any }; data: { status: string; updatedAt: Date } }) => any }; transaction: {
+              create: (arg0: {
+                data: {
+                  userId: string; type: string
+                  // type: "REFUND",
+                  amount: number; description: string; metadata: { serverId: any; serverName: any; reason: string; originalError: string }
+                }
+              }) => any
+            }
+          }) => {
           // Refund the credits
           await tx.user.update({
             where: { id: user.id },
@@ -426,7 +445,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      servers: servers.map(server => ({
+      servers: servers.map((server: { id: any; name: any; software: any; ram: any; status: any; port: any; version: any; node: any; createdAt: any; updatedAt: any }) => ({
         id: server.id,
         name: server.name,
         type: server.software,
